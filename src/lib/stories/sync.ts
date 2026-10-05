@@ -137,8 +137,8 @@ export async function loadCovers(stories: CloudStory[], onCover: (id: string, co
   );
 }
 
-/** Mark a story opened in the private list. Does not upload the clips again. */
-export async function publishUnwrapped(story: Story): Promise<void> {
+/** Write the shelf record only. Does not upload the clips again. */
+export async function publishRecord(story: Story): Promise<void> {
   const status = await cloudStatus();
   if (!status.enabled || !status.signedIn) return;
   await writeCloudStory({ data: toCloud(story) });

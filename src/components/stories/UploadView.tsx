@@ -813,7 +813,7 @@ export function UploadView({
         title: title.trim() || text.defaultTitle,
         cover,
         durationMs: clips.reduce((sum, clip) => sum + clip.durationMs, 0),
-        unwrapped: story?.unwrapped ?? false,
+        unwrapped: story?.unwrapped ?? true,
         createdAt: story?.createdAt ?? Date.now(),
         updatedAt: Date.now(),
         clips,
