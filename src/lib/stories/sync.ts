@@ -25,13 +25,13 @@ async function putSigned(url: string, body: Blob): Promise<void> {
   try {
     response = await fetch(url, { method: "PUT", body });
   } catch {
-    throw new Error("The private bucket blocked that upload. Add a CORS rule for this site.");
+    throw new Error("The private bucket blocked that upload. Allow this site to PUT files in the bucket CORS settings.");
   }
-  if (!response.ok) throw new Error("Couldn't store that story privately.");
+  if (!response.ok) throw new Error("The private bucket refused that file.");
 }
 
 /** Upload any local files we still have, then write the private shelf record. */
-export async function publishStory(story: Story): Promise<void> {
+export async function publishStory(story: Story, onProgress?: (label: string) => void): Promise<void> {
   const status = await cloudStatus();
   if (!status.enabled) return;
   if (!status.signedIn) throw new Error("Enter the family passphrase.");
@@ -44,8 +44,19 @@ export async function publishStory(story: Story): Promise<void> {
       /* this phone does not have the clip; the private copy is already stored */
     }
   }
-  const signed = await signStoryPaths({ data: { puts: [...bodies.keys()] } });
-  await Promise.all(signed.puts.map((item) => putSigned(item.url, bodies.get(item.path) as Blob)));
+  const uploads = [...bodies.entries()];
+  onProgress?.("Asking for a private upload…");
+  const signed = await signStoryPaths({ data: { puts: uploads.map(([path]) => path), origin: location.origin } });
+  const urls = new Map(signed.puts.map((item) => [item.path, item.url]));
+  let clip = 0;
+  for (const [path, body] of uploads) {
+    const url = urls.get(path);
+    if (!url) throw new Error("Couldn't store that story privately.");
+    clip += 1;
+    onProgress?.(clip === 1 ? "Saving the cover…" : `Saving clip ${clip - 1} of ${uploads.length - 1}…`);
+    await putSigned(url, body);
+  }
+  onProgress?.("Saving the shelf…");
   await writeCloudStory({ data: toCloud(story) });
 }
 
@@ -66,7 +77,7 @@ export async function reconcileCloud(local: Story[]): Promise<Story[]> {
   for (const story of remote.stories) {
     const have = byId.get(story.id);
     if (have && stamp(have) >= stamp(story)) continue;
-    const signed = await signStoryPaths({ data: { gets: [coverKey(story.id)] } });
+    const signed = await signStoryPaths({ data: { gets: [coverKey(story.id)], origin: location.origin } });
     const url = signed.gets[0]?.url;
     if (!url) continue;
     const response = await fetch(url);
