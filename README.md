@@ -15,7 +15,28 @@ A private family shelf for video stories. One phone, no accounts. Clips stay on 
 
 The app copies each clip into the browser’s private file storage. IndexedDB keeps the title, cover, length, unwrap state, and the ordered list of clip paths. The gallery originals are left alone.
 
-`src/lib/stories/source.ts` is the only module that knows where a clip lives. The shelf and the player ask it for a playable URL.
+`src/lib/stories/source.ts` is the only module that knows where a clip lives. The shelf and the player ask it for a playable URL. A clip on this phone plays from the phone. If it is only in the private bucket, that module asks for a short-lived link.
+
+## Private cloud
+
+Clips and the shelf list can also live in a private Cloudflare R2 bucket. Nothing in the bucket is public. The app link still only opens a locked shelf. A family passphrase, kept on the server, is required before a story can be listed or played. Video links expire after two hours and are never stored in the app.
+
+You do not need a separate database. The shelf list is one private object in the same bucket.
+
+Set these on the server that hosts the app. Do not put them in the browser or in git.
+
+```
+R2_ACCOUNT_ID=
+R2_BUCKET=
+R2_ACCESS_KEY_ID=
+R2_SECRET_ACCESS_KEY=
+FAMILY_PASSPHRASE=
+```
+
+Create an R2 API token that can read and write objects in that bucket only. Leave the bucket private: no public access, and no `r2.dev` website. The first successful passphrase sign-in tries to allow uploads from that site. If the token cannot edit CORS, add one rule by hand for the app's address, methods `GET`, `PUT`, and `HEAD`, and allowed headers `*`.
+
+Until those values are set, stories stay on the phone and the shelf says so.
+
 
 ## Run it
 

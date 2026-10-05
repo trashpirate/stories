@@ -68,17 +68,24 @@ export async function putStory(story: Story): Promise<void> {
   await settle(tx);
 }
 
-export async function markUnwrapped(id: string): Promise<void> {
+export async function markUnwrapped(id: string): Promise<Story | null> {
   const db = await openDb();
   const tx = db.transaction(STORE, "readwrite");
-  const request = tx.objectStore(STORE).get(id);
-  request.onsuccess = () => {
-    const current = request.result as Story | undefined;
-    if (!current || current.unwrapped) return;
-    current.unwrapped = true;
-    tx.objectStore(STORE).put(current);
-  };
+  const store = tx.objectStore(STORE);
+  const current = await new Promise<Story | undefined>((resolve, reject) => {
+    const request = store.get(id);
+    request.onsuccess = () => resolve(request.result as Story | undefined);
+    request.onerror = () => reject(request.error ?? new Error("Couldn't open that present."));
+  });
+  if (!current || current.unwrapped) {
+    await settle(tx);
+    return current ?? null;
+  }
+  current.unwrapped = true;
+  current.updatedAt = Date.now();
+  store.put(current);
   await settle(tx);
+  return current;
 }
 
 export async function removeStory(id: string): Promise<void> {
