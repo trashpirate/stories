@@ -1,8 +1,7 @@
 import { cloudStatus, deleteCloudStory, readCloudLibrary, signStoryPaths, unlockFamily, writeCloudStory } from "@/lib/stories/cloud.fn";
-import { putStory } from "@/lib/stories/db";
 import { coverKey } from "@/lib/stories/keys";
-import { CODE, fail, isStoriesError, report } from "@/lib/stories/log";
-import { readClipFile, rememberStory } from "@/lib/stories/source";
+import { CODE, fail, report } from "@/lib/stories/log";
+import { readClipFile } from "@/lib/stories/source";
 import type { CloudStory, Story } from "@/lib/stories/types";
 
 export type SaveStep =
@@ -10,10 +9,6 @@ export type SaveStep =
   | { kind: "cover" }
   | { kind: "clip"; n: number; total: number }
   | { kind: "shelf" };
-
-function stamp(story: { updatedAt?: number; createdAt: number }): number {
-  return story.updatedAt || story.createdAt || 0;
-}
 
 function toCloud(story: Story): CloudStory {
   return {
@@ -27,14 +22,26 @@ function toCloud(story: Story): CloudStory {
   };
 }
 
-async function putSigned(path: string, url: string, body: Blob): Promise<void> {
-  let response: Response;
-  try {
-    response = await fetch(url, { method: "PUT", body });
-  } catch (error) {
-    fail(CODE.save, `upload blocked for ${path}. Bucket CORS must allow PUT from this site.`, error);
+async function putSigned(path: string, body: Blob): Promise<void> {
+  let last: unknown;
+  for (let attempt = 1; attempt <= 3; attempt++) {
+    const signed = await signStoryPaths({ data: { puts: [path] } });
+    const url = signed.puts[0]?.url;
+    if (!url) fail(CODE.save, `no signed upload url for ${path}`);
+    try {
+      const response = await fetch(url, { method: "PUT", body });
+      if (response.ok) return;
+      last = { status: response.status };
+      report(`upload refused for ${path} on attempt ${attempt}`, last);
+      if (response.status !== 408 && response.status !== 429 && response.status < 500) {
+        fail(CODE.save, `upload refused for ${path}`, last);
+      }
+    } catch (error) {
+      last = error;
+      report(`upload did not finish for ${path} on attempt ${attempt}`, error);
+    }
   }
-  if (!response.ok) fail(CODE.save, `upload refused for ${path}`, { status: response.status });
+  fail(CODE.save, `upload did not finish for ${path}`, last);
 }
 
 /** Upload any local files we still have, then write the private shelf record. */
@@ -57,26 +64,29 @@ async function uploadStory(story: Story, onProgress?: (step: SaveStep) => void):
   const status = await cloudStatus();
   if (!status.enabled) return;
   if (!status.signedIn) fail(CODE.passphrase, "publish while signed out");
-  const bodies = new Map<string, Blob>();
-  bodies.set(coverKey(story.id), story.cover);
+  const steps: { path: string; load: () => Promise<Blob | null> }[] = [
+    { path: coverKey(story.id), load: async () => story.cover },
+  ];
   for (const clip of story.clips) {
-    try {
-      bodies.set(clip.path, await readClipFile(clip));
-    } catch {
-      /* this phone does not have the clip; the private copy is already stored */
-    }
+    steps.push({
+      path: clip.path,
+      load: async () => {
+        try {
+          return await readClipFile(clip);
+        } catch {
+          return null;
+        }
+      },
+    });
   }
-  const uploads = [...bodies.entries()];
   onProgress?.({ kind: "prepare" });
-  const signed = await signStoryPaths({ data: { puts: uploads.map(([path]) => path) } });
-  const urls = new Map(signed.puts.map((item) => [item.path, item.url]));
-  let clip = 0;
-  for (const [path, body] of uploads) {
-    const url = urls.get(path);
-    if (!url) fail(CODE.save, `no signed upload url for ${path}`);
-    clip += 1;
-    onProgress?.(clip === 1 ? { kind: "cover" } : { kind: "clip", n: clip - 1, total: uploads.length - 1 });
-    await putSigned(path, url, body);
+  let sent = 0;
+  for (const step of steps) {
+    const body = await step.load();
+    if (!body) continue;
+    sent += 1;
+    onProgress?.(sent === 1 ? { kind: "cover" } : { kind: "clip", n: sent - 1, total: steps.length - 1 });
+    await putSigned(step.path, body);
   }
   onProgress?.({ kind: "shelf" });
   await writeCloudStory({ data: toCloud(story) });
@@ -88,44 +98,50 @@ export async function unpublishStory(story: Story): Promise<void> {
   await deleteCloudStory({ data: { id: story.id } });
 }
 
-function byNewest(stories: Story[]): Story[] {
+function byNewest<T extends { createdAt: number }>(stories: T[]): T[] {
   return [...stories].sort((a, b) => b.createdAt - a.createdAt);
 }
 
-/** Pull the private shelf, keep the newer copy of each story, and upload ones that exist only here. */
-export async function reconcileCloud(local: Story[]): Promise<Story[]> {
+/** The private shelf list, or null when this app is not signed in to the bucket. */
+export async function listCloudStories(): Promise<CloudStory[] | null> {
   const status = await cloudStatus();
-  if (!status.enabled || !status.signedIn) return byNewest(local);
+  if (!status.enabled || !status.signedIn) return null;
   const remote = await readCloudLibrary();
-  const byId = new Map(local.map((story) => [story.id, story]));
-  const remoteIds = new Set(remote.stories.map((story) => story.id));
+  return remote.stories;
+}
 
-  for (const story of remote.stories) {
-    const have = byId.get(story.id);
-    if (have && stamp(have) >= stamp(story)) continue;
-    const signed = await signStoryPaths({ data: { gets: [coverKey(story.id)] } });
-    const url = signed.gets[0]?.url;
-    if (!url) continue;
-    const response = await fetch(url);
-    if (!response.ok) continue;
-    const next: Story = { ...story, cover: await response.blob() };
-    await rememberStory(next);
-    await putStory(next);
-    byId.set(story.id, next);
-  }
+/** Keep covers that already arrived, and leave the rest empty until they download. */
+export function mergeCloud(remote: CloudStory[], previous: Story[] | null): Story[] {
+  const covers = new Map((previous ?? []).filter((story) => story.cover.size > 0).map((story) => [story.id, story.cover]));
+  return byNewest(remote).map((story) => ({ ...story, cover: covers.get(story.id) ?? new Blob() }));
+}
 
-  for (const story of byId.values()) {
-    const cloud = remote.stories.find((item) => item.id === story.id);
-    if (!remoteIds.has(story.id) || (cloud && stamp(story) > stamp(cloud))) {
+/** Download covers in parallel. Each one is reported as soon as it arrives. */
+export async function loadCovers(stories: CloudStory[], onCover: (id: string, cover: Blob) => void): Promise<void> {
+  if (!stories.length) return;
+  const signed = await signStoryPaths({ data: { gets: stories.map((story) => coverKey(story.id)) } });
+  await Promise.all(
+    signed.gets.map(async (item) => {
       try {
-        await publishStory(story);
+        const response = await fetch(item.url);
+        if (!response.ok) {
+          report(`cover download failed for ${item.path}`, { status: response.status });
+          return;
+        }
+        const id = item.path.split("/")[1];
+        if (id) onCover(id, await response.blob());
       } catch (error) {
-        if (!isStoriesError(error)) report(`cloud publish skipped for ${story.id}`, error);
+        report(`cover download failed for ${item.path}`, error);
       }
-    }
-  }
+    }),
+  );
+}
 
-  return byNewest([...byId.values()]);
+/** Mark a story opened in the private list. Does not upload the clips again. */
+export async function publishUnwrapped(story: Story): Promise<void> {
+  const status = await cloudStatus();
+  if (!status.enabled || !status.signedIn) return;
+  await writeCloudStory({ data: toCloud(story) });
 }
 
 export async function openFamilyShelf(passphrase: string): Promise<boolean> {

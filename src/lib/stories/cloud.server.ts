@@ -252,7 +252,7 @@ export function signPaths(
     const signedPuts = await Promise.all(
       puts.map(async (path) => {
         assertKey(path);
-        const url = await getSignedUrl(r2(), new PutObjectCommand({ Bucket: bucket(), Key: path }), { expiresIn: 60 * 15 });
+        const url = await getSignedUrl(r2(), new PutObjectCommand({ Bucket: bucket(), Key: path }), { expiresIn: 60 * 60 * 6 });
         return { path, url };
       }),
     );
