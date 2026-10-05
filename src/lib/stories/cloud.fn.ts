@@ -1,4 +1,5 @@
 import { createServerFn } from "@tanstack/react-start";
+import { CODE, fail } from "@/lib/stories/log";
 import type { CloudStory } from "@/lib/stories/types";
 
 export const cloudStatus = createServerFn({ method: "GET" }).handler(async () => {
@@ -8,7 +9,7 @@ export const cloudStatus = createServerFn({ method: "GET" }).handler(async () =>
 
 export const unlockFamily = createServerFn({ method: "POST" })
   .validator((data: { passphrase: string }) => {
-    if (!data || typeof data.passphrase !== "string") throw new Error("Enter the family passphrase.");
+    if (!data || typeof data.passphrase !== "string") fail(CODE.passphrase, "unlock called without a passphrase");
     return { passphrase: data.passphrase };
   })
   .handler(async ({ data }) => {
@@ -30,7 +31,7 @@ export const writeCloudStory = createServerFn({ method: "POST" })
 
 export const deleteCloudStory = createServerFn({ method: "POST" })
   .validator((data: { id: string }) => {
-    if (!data || typeof data.id !== "string") throw new Error("Couldn't remove that story.");
+    if (!data || typeof data.id !== "string") fail(CODE.remove, "delete called without an id");
     return { id: data.id };
   })
   .handler(async ({ data }) => {

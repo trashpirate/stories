@@ -185,6 +185,28 @@
   transform: translateX(1.25rem);
 }
 
+.lang-switch {
+  display: flex;
+  overflow: hidden;
+  border-radius: 999px;
+  background: var(--color-card);
+  box-shadow: var(--shadow-lift);
+}
+.lang-switch button {
+  min-width: 2.6rem;
+  min-height: 3rem;
+  border: 0;
+  background: transparent;
+  color: var(--color-ink);
+  font-family: inherit;
+  font-size: 0.95rem;
+  font-weight: 800;
+}
+.lang-switch button[aria-pressed="true"] {
+  background: var(--color-cobalt);
+  color: var(--color-card);
+}
+
 .limit-card {
   display: grid;
   gap: 0.65rem;

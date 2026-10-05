@@ -1,4 +1,5 @@
 import { backupStories, recallStories, requestPersistentStorage } from "@/lib/stories/source";
+import { CODE, noted } from "@/lib/stories/log";
 import type { Story } from "@/lib/stories/types";
 
 const DB_NAME = "stories";
@@ -30,11 +31,13 @@ function openDb(): Promise<IDBDatabase> {
     };
     request.onerror = () => {
       opening = null;
-      reject(request.error ?? new Error("Couldn't open the shelf."));
+      opening = null;
+      reject(noted(CODE.shelf, "indexedDB open failed", request.error));
     };
     request.onblocked = () => {
       opening = null;
-      reject(new Error("Couldn't open the shelf."));
+      opening = null;
+      reject(noted(CODE.shelf, "indexedDB open blocked"));
     };
   });
   return opening;
@@ -43,8 +46,8 @@ function openDb(): Promise<IDBDatabase> {
 function settle(tx: IDBTransaction): Promise<void> {
   return new Promise((resolve, reject) => {
     tx.oncomplete = () => resolve();
-    tx.onerror = () => reject(tx.error ?? new Error("Couldn't update the shelf."));
-    tx.onabort = () => reject(tx.error ?? new Error("Couldn't update the shelf."));
+    tx.onerror = () => reject(noted(CODE.save, "indexedDB transaction failed", tx.error));
+    tx.onabort = () => reject(noted(CODE.save, "indexedDB transaction aborted", tx.error));
   });
 }
 
@@ -55,7 +58,7 @@ export async function listStories(): Promise<Story[]> {
   const finished = settle(tx);
   const rows = await new Promise<Story[]>((resolve, reject) => {
     request.onsuccess = () => resolve((request.result as Story[]) ?? []);
-    request.onerror = () => reject(request.error ?? new Error("Couldn't open the shelf."));
+    request.onerror = () => reject(noted(CODE.shelf, "indexedDB list failed", request.error));
   });
   await finished;
   return rows.sort((a, b) => b.createdAt - a.createdAt);
@@ -75,7 +78,7 @@ export async function markUnwrapped(id: string): Promise<Story | null> {
   const current = await new Promise<Story | undefined>((resolve, reject) => {
     const request = store.get(id);
     request.onsuccess = () => resolve(request.result as Story | undefined);
-    request.onerror = () => reject(request.error ?? new Error("Couldn't open that present."));
+    request.onerror = () => reject(noted(CODE.open, "indexedDB read of a story failed", request.error));
   });
   if (!current || current.unwrapped) {
     await settle(tx);

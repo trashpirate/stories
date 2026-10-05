@@ -1,6 +1,6 @@
 # Stories
 
-A private family shelf for video stories. One phone, no accounts. Clips stay on the device.
+A private family shelf for video stories. One phone, no accounts. Clips stay on the device. The screen can be English or German. The language switch is saved on the phone. What people see when something fails is a short sentence. The details are written to the server log in English.
 
 ## What it does
 

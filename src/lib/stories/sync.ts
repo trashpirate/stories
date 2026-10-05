@@ -1,8 +1,15 @@
 import { cloudStatus, deleteCloudStory, readCloudLibrary, signStoryPaths, unlockFamily, writeCloudStory } from "@/lib/stories/cloud.fn";
 import { putStory } from "@/lib/stories/db";
 import { coverKey } from "@/lib/stories/keys";
+import { CODE, fail, isStoriesError, report } from "@/lib/stories/log";
 import { readClipFile, rememberStory } from "@/lib/stories/source";
 import type { CloudStory, Story } from "@/lib/stories/types";
+
+export type SaveStep =
+  | { kind: "prepare" }
+  | { kind: "cover" }
+  | { kind: "clip"; n: number; total: number }
+  | { kind: "shelf" };
 
 function stamp(story: { updatedAt?: number; createdAt: number }): number {
   return story.updatedAt || story.createdAt || 0;
@@ -20,20 +27,20 @@ function toCloud(story: Story): CloudStory {
   };
 }
 
-async function putSigned(url: string, body: Blob): Promise<void> {
+async function putSigned(path: string, url: string, body: Blob): Promise<void> {
   let response: Response;
   try {
     response = await fetch(url, { method: "PUT", body });
-  } catch {
-    throw new Error("The private bucket blocked that upload. Allow this site to PUT files in the bucket CORS settings.");
+  } catch (error) {
+    fail(CODE.save, `upload blocked for ${path}. Bucket CORS must allow PUT from this site.`, error);
   }
-  if (!response.ok) throw new Error("The private bucket refused that file.");
+  if (!response.ok) fail(CODE.save, `upload refused for ${path}`, { status: response.status });
 }
 
 /** Upload any local files we still have, then write the private shelf record. */
 const publishing = new Map<string, Promise<void>>();
 
-export async function publishStory(story: Story, onProgress?: (label: string) => void): Promise<void> {
+export async function publishStory(story: Story, onProgress?: (step: SaveStep) => void): Promise<void> {
   const current = publishing.get(story.id);
   if (current) {
     await current;
@@ -46,10 +53,10 @@ export async function publishStory(story: Story, onProgress?: (label: string) =>
   await run;
 }
 
-async function uploadStory(story: Story, onProgress?: (label: string) => void): Promise<void> {
+async function uploadStory(story: Story, onProgress?: (step: SaveStep) => void): Promise<void> {
   const status = await cloudStatus();
   if (!status.enabled) return;
-  if (!status.signedIn) throw new Error("Enter the family passphrase.");
+  if (!status.signedIn) fail(CODE.passphrase, "publish while signed out");
   const bodies = new Map<string, Blob>();
   bodies.set(coverKey(story.id), story.cover);
   for (const clip of story.clips) {
@@ -60,18 +67,18 @@ async function uploadStory(story: Story, onProgress?: (label: string) => void): 
     }
   }
   const uploads = [...bodies.entries()];
-  onProgress?.("Asking for a private upload…");
+  onProgress?.({ kind: "prepare" });
   const signed = await signStoryPaths({ data: { puts: uploads.map(([path]) => path) } });
   const urls = new Map(signed.puts.map((item) => [item.path, item.url]));
   let clip = 0;
   for (const [path, body] of uploads) {
     const url = urls.get(path);
-    if (!url) throw new Error("Couldn't store that story privately.");
+    if (!url) fail(CODE.save, `no signed upload url for ${path}`);
     clip += 1;
-    onProgress?.(clip === 1 ? "Saving the cover…" : `Saving clip ${clip - 1} of ${uploads.length - 1}…`);
-    await putSigned(url, body);
+    onProgress?.(clip === 1 ? { kind: "cover" } : { kind: "clip", n: clip - 1, total: uploads.length - 1 });
+    await putSigned(path, url, body);
   }
-  onProgress?.("Saving the shelf…");
+  onProgress?.({ kind: "shelf" });
   await writeCloudStory({ data: toCloud(story) });
 }
 
@@ -112,8 +119,8 @@ export async function reconcileCloud(local: Story[]): Promise<Story[]> {
     if (!remoteIds.has(story.id) || (cloud && stamp(story) > stamp(cloud))) {
       try {
         await publishStory(story);
-      } catch {
-        /* the phone copy remains until the next open */
+      } catch (error) {
+        if (!isStoriesError(error)) report(`cloud publish skipped for ${story.id}`, error);
       }
     }
   }

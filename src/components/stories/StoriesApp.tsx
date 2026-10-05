@@ -1,10 +1,14 @@
 import { useCallback, useEffect, useRef, useState, type FormEvent } from "react";
 import { ArrowLeft, Maximize, Minimize, Pause, Pencil, Play, Plus, Trash2 } from "lucide-react";
 import { GiftCard, UnwrapOverlay } from "@/components/stories/Present";
+import { LangSwitch } from "@/components/stories/LangSwitch";
 import { UploadView } from "@/components/stories/UploadView";
+import { t, uiError, type UiError } from "@/lib/stories/copy";
 import { loadShelf, markUnwrapped, removeStory } from "@/lib/stories/db";
 import { formatClock, formatLength } from "@/lib/stories/format";
+import { useLang } from "@/lib/stories/lang";
 import { useKidsMode, useMaxMinutes } from "@/lib/stories/kids";
+import { CODE, codeOf, report } from "@/lib/stories/log";
 import { discardStoryFiles, getPlayableUrl, releasePlayableUrl, rememberStory } from "@/lib/stories/source";
 import { cloudStatus, openFamilyShelf, publishStory, reconcileCloud, unpublishStory } from "@/lib/stories/sync";
 import type { Story } from "@/lib/stories/types";
@@ -69,13 +73,15 @@ function portraitScreen() {
 export function StoriesApp() {
   const [gate, setGate] = useState<"checking" | "locked" | "open">("checking");
   const [passphrase, setPassphrase] = useState("");
-  const [gateError, setGateError] = useState<string | null>(null);
+  const [gateError, setGateError] = useState<UiError | null>(null);
   const [opening, setOpening] = useState(false);
   const [phoneOnly, setPhoneOnly] = useState(false);
+  const [lang] = useLang();
+  const text = t(lang);
   const [kids, setKids] = useKidsMode();
   const [savedMaxMinutes, setMaxMinutes] = useMaxMinutes();
   const [stories, setStories] = useState<Story[] | null>(null);
-  const [shelfError, setShelfError] = useState<string | null>(null);
+  const [shelfError, setShelfError] = useState<UiError | null>(null);
   const [mode, setMode] = useState<Mode>({ type: "shelf" });
   const [pendingDelete, setPendingDelete] = useState<Story | null>(null);
   const [paused, setPaused] = useState(false);
@@ -97,6 +103,11 @@ export function StoriesApp() {
   const keepRef = useRef<HTMLButtonElement>(null);
 
   useEffect(() => {
+    document.documentElement.lang = lang;
+    document.title = text.app;
+  }, [lang, text.app]);
+
+  useEffect(() => {
     let cancel = false;
     cloudStatus()
       .then((status) => {
@@ -104,7 +115,8 @@ export function StoriesApp() {
         setPhoneOnly(!status.enabled);
         setGate(status.enabled && !status.signedIn ? "locked" : "open");
       })
-      .catch(() => {
+      .catch((error) => {
+        report("could not read cloud status", error);
         if (!cancel) setGate("open");
       });
     return () => {
@@ -123,9 +135,9 @@ export function StoriesApp() {
           setShelfError(null);
           setStories((current) => (rows.length === 0 && current && current.length > 0 ? current : rows));
         })
-        .catch(() => {
+        .catch((error) => {
           if (!cancel) {
-            setShelfError("Couldn't open the shelf on this phone.");
+            setShelfError(codeOf(error));
             setStories((current) => current ?? []);
           }
         });
@@ -223,14 +235,15 @@ export function StoriesApp() {
       if (ticket !== flightRef.current) return;
       setPaused(false);
       setNeedsTap(false);
-    } catch {
+    } catch (error) {
       if (ticket !== flightRef.current) return;
       if (url && playRef.current?.url !== url) releasePlayableUrl(url);
       if (index + 1 < story.clips.length) {
         await goTo(story, index + 1);
         return;
       }
-      setShelfError("That story couldn't play.");
+      report("playback failed while changing clip", error);
+      setShelfError(CODE.play);
       closePlayer();
     }
   }, [closePlayer]);
@@ -253,7 +266,7 @@ export function StoriesApp() {
 
   async function openStory(story: Story) {
     if (!story.clips.length) {
-      setShelfError("That story has no clips.");
+      setShelfError("noclips");
       return;
     }
     const ticket = ++flightRef.current;
@@ -265,7 +278,7 @@ export function StoriesApp() {
     try {
       url = await primed;
     } catch (error) {
-      setShelfError(error instanceof Error ? error.message : "That story couldn't be opened.");
+      setShelfError(codeOf(error));
       return;
     }
     if (ticket !== flightRef.current) {
@@ -297,14 +310,8 @@ export function StoriesApp() {
       playRef.current = { story: opened, index: 0, url };
       setStories((list) => list?.map((item) => (item.id === story.id ? opened : item)) ?? list);
       setMode({ type: "unwrap", story: opened });
-      try {
-        void rememberStory(opened);
-        void publishStory(opened);
-      } catch {
-        setStories((list) => list?.map((item) => (item.id === story.id ? story : item)) ?? list);
-        setShelfError("Couldn't open that present.");
-        closePlayer();
-      }
+      void rememberStory(opened).catch((error) => report("could not remember unwrapped story", error));
+      void publishStory(opened).catch((error) => report("could not publish unwrapped story", error));
       return;
     }
     setMode({ type: "play", story });
@@ -332,7 +339,14 @@ export function StoriesApp() {
       void goTo(current.story, current.index + 1);
       return;
     }
-    setShelfError("That story couldn't play.");
+    const media = video.error;
+    report("playback stopped", {
+      code: media?.code,
+      message: media?.message,
+      index: current.index,
+      path: current.story.clips[current.index]?.path,
+    });
+    setShelfError(CODE.play);
     closePlayer();
   }
 
@@ -462,8 +476,8 @@ export function StoriesApp() {
       await removeStory(story.id);
       await unpublishStory(story);
       setStories((list) => (list ?? []).filter((item) => item.id !== story.id));
-    } catch {
-      setShelfError("Couldn't remove that story.");
+    } catch (error) {
+      setShelfError(codeOf(error));
     }
   }
 
@@ -553,15 +567,16 @@ export function StoriesApp() {
     try {
       const ok = await openFamilyShelf(passphrase);
       if (!ok) {
-        setGateError("That passphrase does not open the shelf.");
+        report("family passphrase rejected");
+        setGateError(CODE.passphrase);
         setOpening(false);
         return;
       }
       setPassphrase("");
       setOpening(false);
       setGate("open");
-    } catch {
-      setGateError("Couldn't open the private shelf.");
+    } catch (error) {
+      setGateError(codeOf(error));
       setOpening(false);
     }
   }
@@ -570,8 +585,11 @@ export function StoriesApp() {
     return (
       <main className="app-shell min-h-dvh bg-sky text-ink">
         <form className="mx-auto grid min-h-dvh w-full max-w-lg content-center gap-4 px-5" onSubmit={(event) => void submitPassphrase(event)}>
-          <h1 className="font-display text-4xl font-semibold">Stories</h1>
-          <p className="text-lg font-bold text-muted">{gate === "checking" ? "Opening the shelf." : "This shelf is private."}</p>
+          <div className="flex justify-end">
+            <LangSwitch />
+          </div>
+          <h1 className="font-display text-4xl font-semibold">{text.app}</h1>
+          <p className="text-lg font-bold text-muted">{gate === "checking" ? text.openingShelf : text.privateShelf}</p>
           {gate === "locked" ? (
             <>
               <input
@@ -579,17 +597,17 @@ export function StoriesApp() {
                 name="passphrase"
                 autoComplete="current-password"
                 className="min-h-14 rounded-3xl bg-card px-4 text-lg font-bold shadow-lift"
-                placeholder="Family passphrase"
+                placeholder={text.passphrase}
                 value={passphrase}
                 onChange={(event) => setPassphrase(event.target.value)}
               />
               {gateError ? (
                 <p className="font-bold" role="alert">
-                  {gateError}
+                  {uiError(lang, gateError)}
                 </p>
               ) : null}
               <button type="submit" className="btn-primary tap" disabled={opening || passphrase.length === 0}>
-                {opening ? "Opening" : "Open"}
+                {opening ? text.opening : text.open}
               </button>
             </>
           ) : null}
@@ -632,23 +650,23 @@ export function StoriesApp() {
                   onPointerDown={(event) => event.stopPropagation()}
                   onClick={() => togglePause()}
                 >
-                  Play
+                  {text.play}
                 </button>
               ) : null}
               <span className="sr-only">
-                {paused ? "Paused." : "Playing."} Tap the picture to show the buttons.
+                {paused ? text.paused : text.playing} {text.tapForButtons}
               </span>
             </div>
             <div className={chromeOn ? "player-chrome" : "player-chrome is-hidden"} inert={chromeOn ? undefined : true}>
               <div className="player-top">
                 <button type="button" className="shelf-back tap" onClick={closePlayer}>
                   <ArrowLeft className="size-6" aria-hidden="true" />
-                  Shelf
+                  {text.shelf}
                 </button>
                 <button
                   type="button"
                   className="full-btn tap"
-                  aria-label={fullOn ? "Leave full screen" : "Full screen"}
+                  aria-label={fullOn ? text.leaveFull : text.fullScreen}
                   onClick={() => void toggleFullscreen()}
                 >
                   {fullOn ? (
@@ -662,7 +680,7 @@ export function StoriesApp() {
                 <button
                   type="button"
                   className="play-toggle tap"
-                  aria-label={paused || needsTap ? "Play" : "Pause"}
+                  aria-label={paused || needsTap ? text.play : text.pause}
                   onClick={() => {
                     wakeChrome();
                     togglePause();
@@ -683,7 +701,7 @@ export function StoriesApp() {
                     className="scrub"
                     role="slider"
                     tabIndex={0}
-                    aria-label="Move through the story"
+                    aria-label={text.scrub}
                     aria-valuemin={0}
                     aria-valuemax={storySpan(mode.story)}
                     aria-valuenow={Math.min(positionMs, storySpan(mode.story))}
@@ -747,31 +765,34 @@ export function StoriesApp() {
           />
         ) : mode.type === "shelf" ? (
           <>
-            <header className="flex items-center justify-between gap-3 px-5 pt-5 pb-3">
+            <header className="flex flex-wrap items-center justify-between gap-3 px-5 pt-5 pb-3">
               <div>
-                <h1 className="font-display text-4xl font-semibold">Stories</h1>
-                {phoneOnly ? <p className="font-bold text-muted">On this phone only.</p> : null}
+                <h1 className="font-display text-4xl font-semibold">{text.app}</h1>
+                {phoneOnly ? <p className="font-bold text-muted">{text.phoneOnly}</p> : null}
               </div>
-              <button
-                type="button"
-                role="switch"
-                aria-checked={kids}
-                aria-label="Kids mode"
-                className="tap flex min-h-12 items-center gap-2 rounded-full bg-card px-3 py-2 shadow-lift"
-                onClick={() => setKids(!kids)}
-              >
-                <span className="font-extrabold">Kids</span>
-                <span className={kids ? "switch-track on" : "switch-track"}>
-                  <span className="switch-knob" />
-                </span>
-              </button>
+              <div className="flex shrink-0 items-center gap-2">
+                <LangSwitch />
+                <button
+                  type="button"
+                  role="switch"
+                  aria-checked={kids}
+                  aria-label={text.kidsMode}
+                  className="tap flex min-h-12 items-center gap-2 rounded-full bg-card px-3 py-2 shadow-lift"
+                  onClick={() => setKids(!kids)}
+                >
+                  <span className="font-extrabold">{text.kids}</span>
+                  <span className={kids ? "switch-track on" : "switch-track"}>
+                    <span className="switch-knob" />
+                  </span>
+                </button>
+              </div>
             </header>
             {!kids ? (
               <div className="grid gap-3 px-5 pb-4">
                 <label className="limit-card">
                   <span className="flex items-baseline justify-between gap-3">
-                    <span className="font-extrabold">Kids shelf</span>
-                    <span className="font-extrabold text-cobalt">Up to {maxMinutes} min</span>
+                    <span className="font-extrabold">{text.kidsShelf}</span>
+                    <span className="font-extrabold text-cobalt">{text.upTo(maxMinutes)}</span>
                   </span>
                   <input
                     className="limit-slider"
@@ -780,46 +801,46 @@ export function StoriesApp() {
                     max={Math.max(longestMinutes, maxMinutes)}
                     step={1}
                     value={maxMinutes}
-                    aria-valuetext={`${maxMinutes} minutes`}
+                    aria-valuetext={text.minutes(maxMinutes)}
                     onChange={(event) => setMaxMinutes(Number(event.target.value))}
                   />
-                  <span className="text-base font-bold text-muted">Longer stories stay hidden in Kids mode.</span>
+                  <span className="text-base font-bold text-muted">{text.kidsHint}</span>
                 </label>
                 <button type="button" className="btn-primary tap" onClick={() => setMode({ type: "upload", story: null })}>
                   <Plus className="size-6" aria-hidden="true" />
-                  New story
+                  {text.newStory}
                 </button>
               </div>
             ) : null}
             {shelfError ? (
               <p className="mx-5 mb-3 rounded-3xl bg-card px-4 py-3 font-bold" role="alert">
-                {shelfError}
+                {uiError(lang, shelfError)}
               </p>
             ) : null}
             {stories === null ? (
               <p className="flex items-center gap-2 px-5 font-bold text-muted">
-                <span className="busy-dot" /> Opening the shelf
+                <span className="busy-dot" /> {text.openingShelf}
               </p>
             ) : stories.length === 0 ? (
               <section className="mx-5 rounded-card bg-card px-5 py-8 text-center shadow-lift">
-                <h2 className="font-display text-3xl font-semibold">The shelf is clear</h2>
+                <h2 className="font-display text-3xl font-semibold">{text.shelfClear}</h2>
                 <p className="mt-2 text-lg font-bold text-muted">
-                  {kids ? "Nothing to watch yet." : "Add a story and it shows up here as a present."}
+                  {kids ? text.nothingYet : text.addPresent}
                 </p>
               </section>
             ) : visible.length === 0 ? (
               <section className="mx-5 rounded-card bg-card px-5 py-8 text-center shadow-lift">
-                <h2 className="font-display text-3xl font-semibold">Nothing to watch yet</h2>
-                <p className="mt-2 text-lg font-bold text-muted">Shorter stories will show up here.</p>
+                <h2 className="font-display text-3xl font-semibold">{text.nothingTitle}</h2>
+                <p className="mt-2 text-lg font-bold text-muted">{text.shorterHere}</p>
               </section>
             ) : (
-              <div className="shelf-row" role="list" aria-label="Stories">
+              <div className="shelf-row" role="list" aria-label={text.stories}>
                 {visible.map((story) => (
                   <article key={story.id} className="story-card" role="listitem">
                     <button
                       type="button"
                       className="tap relative block w-full overflow-hidden rounded-card bg-card text-left shadow-lift"
-                      aria-label={story.unwrapped ? story.title : "Present"}
+                      aria-label={story.unwrapped ? story.title : text.present}
                       onPointerDown={() => prime(story)}
                       onClick={() => void openStory(story)}
                     >
@@ -828,7 +849,7 @@ export function StoriesApp() {
                           <CoverImage blob={story.cover} alt="" />
                           <div className="card-caption">
                             <h2>{story.title}</h2>
-                            {!kids ? <p>{formatLength(story.durationMs)}</p> : null}
+                            {!kids ? <p>{formatLength(story.durationMs, lang)}</p> : null}
                           </div>
                         </>
                       ) : (
@@ -840,7 +861,7 @@ export function StoriesApp() {
                         <button
                           type="button"
                           className="tap absolute top-2 left-2 grid size-11 place-items-center rounded-full bg-card text-cobalt shadow-lift"
-                          aria-label={story.unwrapped ? `Edit ${story.title}` : "Edit present"}
+                          aria-label={story.unwrapped ? text.editNamed(story.title) : text.editPresent}
                           onPointerDown={(event) => event.stopPropagation()}
                           onClick={() => setMode({ type: "upload", story })}
                         >
@@ -849,7 +870,7 @@ export function StoriesApp() {
                         <button
                           type="button"
                           className="tap absolute top-2 right-2 grid size-11 place-items-center rounded-full bg-card text-cobalt shadow-lift"
-                          aria-label={story.unwrapped ? `Delete ${story.title}` : "Delete present"}
+                          aria-label={story.unwrapped ? text.deleteNamed(story.title) : text.deletePresent}
                           onPointerDown={(event) => event.stopPropagation()}
                           onClick={() => setPendingDelete(story)}
                         >
@@ -875,14 +896,14 @@ export function StoriesApp() {
             onClick={(event) => event.stopPropagation()}
           >
             <h2 id="delete-title" className="font-display text-3xl font-semibold">
-              Delete this story?
+              {text.deleteAsk}
             </h2>
-            <p className="text-lg font-bold text-muted">It leaves the shelf.</p>
+            <p className="text-lg font-bold text-muted">{text.deleteHint}</p>
             <button ref={keepRef} type="button" className="btn-primary tap" onClick={() => setPendingDelete(null)}>
-              Keep
+              {text.keep}
             </button>
             <button type="button" className="btn-quiet tap" onClick={() => void confirmDelete()}>
-              Delete
+              {text.delete}
             </button>
           </div>
         </div>

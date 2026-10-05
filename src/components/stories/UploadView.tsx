@@ -1,10 +1,14 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { ArrowLeft, Camera, Check, ChevronDown, ChevronUp, Image as ImageIcon, Trash2 } from "lucide-react";
+import { LangSwitch } from "@/components/stories/LangSwitch";
+import { t, uiError, type UiError } from "@/lib/stories/copy";
 import { putStory } from "@/lib/stories/db";
 import { formatClock, formatLength } from "@/lib/stories/format";
+import { useLang } from "@/lib/stories/lang";
+import { CODE, codeOf, noted, report } from "@/lib/stories/log";
 import { discardStoryFiles, pruneStoryFiles, readClipFile, rememberStory, requestPersistentStorage, storeClip } from "@/lib/stories/source";
-import { publishStory } from "@/lib/stories/sync";
+import { publishStory, type SaveStep } from "@/lib/stories/sync";
 import type { Story } from "@/lib/stories/types";
 
 let saveLock = false;
@@ -31,8 +35,9 @@ function probeDuration(file: File): Promise<number> {
       URL.revokeObjectURL(url);
       video.removeAttribute("src");
       video.load();
-      if (ms == null) reject(new Error("Couldn't read that clip"));
-      else resolve(ms);
+      if (ms == null) {
+        reject(noted(CODE.read, `clip metadata missing for ${file.name || "unnamed file"}`, { type: file.type, size: file.size }));
+      } else resolve(ms);
     };
     video.onloadedmetadata = () => {
       const duration = video.duration;
@@ -54,7 +59,7 @@ function waitFor(video: HTMLVideoElement, event: "loadedmetadata"): Promise<void
   return new Promise((resolve, reject) => {
     const timer = window.setTimeout(() => {
       cleanup();
-      reject(new Error("timeout"));
+      reject(noted(CODE.read, "cover metadata timed out"));
     }, 8000);
     const onOk = () => {
       cleanup();
@@ -62,7 +67,7 @@ function waitFor(video: HTMLVideoElement, event: "loadedmetadata"): Promise<void
     };
     const onErr = () => {
       cleanup();
-      reject(new Error("read failed"));
+      reject(noted(CODE.read, "cover video failed to load"));
     };
     const cleanup = () => {
       window.clearTimeout(timer);
@@ -121,7 +126,7 @@ function seekTo(video: HTMLVideoElement, time: number, hold?: () => void): Promi
     };
     const onErr = () => {
       cleanup();
-      reject(new Error("seek failed"));
+      reject(noted(CODE.read, "cover seek failed"));
     };
     const cleanup = () => {
       window.clearTimeout(timer);
@@ -144,10 +149,17 @@ function captureFrame(video: HTMLVideoElement): Promise<Blob> {
   canvas.width = Math.max(1, Math.round(width * scale));
   canvas.height = Math.max(1, Math.round(height * scale));
   const ctx = canvas.getContext("2d");
-  if (!ctx) return Promise.reject(new Error("Couldn't draw the cover"));
+  if (!ctx) {
+    return Promise.reject(noted(CODE.read, "cover canvas unavailable"));
+  }
   ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
   return new Promise((resolve, reject) => {
-    canvas.toBlob((blob) => (blob ? resolve(blob) : reject(new Error("Couldn't save the cover"))), "image/jpeg", 0.86);
+    canvas.toBlob((blob) => {
+      if (blob) resolve(blob);
+      else {
+        reject(noted(CODE.read, "cover jpeg encode failed"));
+      }
+    }, "image/jpeg", 0.86);
   });
 }
 
@@ -195,15 +207,20 @@ function cropView(blob: Blob, view: CoverView, stageW: number, stageH: number): 
       canvas.height = 960;
       const ctx = canvas.getContext("2d");
       if (!ctx || sw < 1 || sh < 1) {
-        reject(new Error("Couldn't draw the cover"));
+        reject(noted(CODE.read, "cover crop canvas unavailable"));
         return;
       }
       ctx.drawImage(image, sx, sy, sw, sh, 0, 0, canvas.width, canvas.height);
-      canvas.toBlob((next) => (next ? resolve(next) : reject(new Error("Couldn't save the cover"))), "image/jpeg", 0.86);
+      canvas.toBlob((next) => {
+        if (next) resolve(next);
+        else {
+          reject(noted(CODE.read, "cover crop jpeg encode failed"));
+        }
+      }, "image/jpeg", 0.86);
     };
     image.onerror = () => {
       URL.revokeObjectURL(url);
-      reject(new Error("Couldn't read the cover"));
+      reject(noted(CODE.read, "cover image failed to load"));
     };
     image.src = url;
   });
@@ -259,7 +276,9 @@ function CoverPicker({
   const [stageSize, setStageSize] = useState({ w: 0, h: 0 });
   const [ready, setReady] = useState(false);
   const [usingExisting, setUsingExisting] = useState(initialCover != null);
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<UiError | null>(null);
+  const [lang] = useLang();
+  const text = t(lang);
 
   function placeView(next: CoverView) {
     const stage = stageRef.current?.getBoundingClientRect();
@@ -281,8 +300,8 @@ function CoverPicker({
       .then((cropped) => {
         if (token === cropToken.current) onCoverRef.current(cropped);
       })
-      .catch(() => {
-        if (token === cropToken.current) setError("Couldn't save that frame.");
+      .catch((error) => {
+        if (token === cropToken.current) setError(codeOf(error));
       });
   }
 
@@ -368,8 +387,8 @@ function CoverPicker({
       setReady(true);
     };
 
-    run().catch(() => {
-      if (!cancel) setError("Couldn't read a cover from this clip.");
+    run().catch((error) => {
+      if (!cancel) setError(codeOf(error));
     });
 
     return () => {
@@ -395,8 +414,8 @@ function CoverPicker({
       sourceRef.current = blob;
       showLoose(url);
       publish(blob);
-    } catch {
-      if (token === scrubToken.current) setError("Couldn't read that frame.");
+    } catch (error) {
+      if (token === scrubToken.current) setError(codeOf(error));
     }
   }
 
@@ -555,7 +574,7 @@ function CoverPicker({
   return (
     <section className="grid gap-2">
       {choices.length > 1 ? (
-        <div ref={clipRowRef} className="clip-row flex gap-2 overflow-x-auto pb-1" role="tablist" aria-label="Choose a clip for the cover">
+        <div ref={clipRowRef} className="clip-row flex gap-2 overflow-x-auto pb-1" role="tablist" aria-label={text.chooseClip}>
           {choices.map((choice) => {
             const selected = choice.key === selectedKey;
             return (
@@ -585,8 +604,8 @@ function CoverPicker({
       ) : null}
       <label className="grid gap-1 font-bold text-ink">
         <span className="flex items-baseline justify-between gap-3">
-          <span>Seek {clipName}</span>
-          <span className="tabular-nums text-muted">{usingExisting ? "Current cover" : formatClock(timeMs)}</span>
+          <span>{text.seek(clipName)}</span>
+          <span className="tabular-nums text-muted">{usingExisting ? text.currentCover : formatClock(timeMs)}</span>
         </span>
         <input
           className="clip-seek"
@@ -596,7 +615,7 @@ function CoverPicker({
           step={50}
           value={Math.min(timeMs, max)}
           disabled={!ready}
-          aria-label={`Seek ${clipName}`}
+          aria-label={text.seek(clipName)}
           style={{ ["--seek" as string]: `${max ? (Math.min(timeMs, max) / max) * 100 : 0}%` }}
           onChange={(event) => onScrub(Number(event.target.value))}
           onPointerDown={beginHold}
@@ -609,7 +628,7 @@ function CoverPicker({
         className="cover-stage"
         role="img"
         tabIndex={0}
-        aria-label="Cover. Drag to move the picture. Pinch or scroll to zoom."
+        aria-label={text.coverHelp}
         onPointerDown={onPanStart}
         onPointerMove={onPanMove}
         onPointerUp={onPanEnd}
@@ -641,12 +660,21 @@ function CoverPicker({
           <p>{lengthLabel}</p>
         </div>
       </div>
-      {error ? <p className="font-bold text-ink">{error}</p> : null}
+      {error ? <p className="font-bold text-ink">{uiError(lang, error)}</p> : null}
       {typeof document === "undefined"
         ? null
         : createPortal(<video ref={videoRef} className="probe-video" muted playsInline preload="auto" />, document.body)}
     </section>
   );
+}
+
+function saveLabel(text: ReturnType<typeof t>, saving: boolean, step: SaveStep | null, editing: boolean): string {
+  if (!saving) return editing ? text.saveChanges : text.saveStory;
+  if (step?.kind === "cover") return text.savingCover;
+  if (step?.kind === "clip") return text.savingClip(step.n, step.total);
+  if (step?.kind === "shelf") return text.savingShelf;
+  if (step?.kind === "prepare") return text.savingPrepare;
+  return text.saving;
 }
 
 export function UploadView({
@@ -672,10 +700,12 @@ export function UploadView({
   const [keepInitial, setKeepInitial] = useState(story != null);
   const [reading, setReading] = useState(story != null);
   const [saving, setSaving] = useState(false);
-  const [savingLabel, setSavingLabel] = useState("Saving…");
+  const [step, setStep] = useState<SaveStep | null>(null);
   const [saved, setSaved] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<UiError | null>(null);
   const [confirmLeave, setConfirmLeave] = useState(false);
+  const [lang] = useLang();
+  const text = t(lang);
 
   const coverClip = drafts.find((clip) => clip.key === coverClipKey) ?? drafts[0];
   const activeKey = coverClip?.key ?? "";
@@ -695,7 +725,7 @@ export function UploadView({
         }
         if (cancel) return;
         if (!added.length) {
-          setError("This story has no clips.");
+          setError("noclips");
           return;
         }
         firstKey.current = added[0].key;
@@ -703,8 +733,8 @@ export function UploadView({
         setCoverClipKey(added[0].key);
         setCover(source.cover);
         setCoverKey(added[0].key);
-      } catch {
-        if (!cancel) setError("Couldn't open this story.");
+      } catch (error) {
+        if (!cancel) setError(codeOf(error));
       } finally {
         if (!cancel) setReading(false);
       }
@@ -742,10 +772,10 @@ export function UploadView({
         const durationMs = await probeDuration(file);
         added.push({ key: crypto.randomUUID(), file, durationMs });
       }
-      if (!added.length) setError("Choose a video from the camera or gallery.");
+      if (!added.length) setError(CODE.video);
       else setDrafts((current) => [...current, ...added]);
-    } catch {
-      setError("Couldn't read one of those clips.");
+    } catch (error) {
+      setError(codeOf(error));
     } finally {
       setReading(false);
     }
@@ -768,7 +798,7 @@ export function UploadView({
     saveLock = true;
     savingRef.current = true;
     setSaving(true);
-    setSavingLabel("Saving…");
+    setStep({ kind: "prepare" });
     setError(null);
     const storyId = storyIdRef.current;
     let kept = false;
@@ -780,7 +810,7 @@ export function UploadView({
       }
       const next: Story = {
         id: storyId,
-        title: title.trim() || "Story from Oma",
+        title: title.trim() || text.defaultTitle,
         cover,
         durationMs: clips.reduce((sum, clip) => sum + clip.durationMs, 0),
         unwrapped: story?.unwrapped ?? false,
@@ -790,12 +820,12 @@ export function UploadView({
       };
       await rememberStory(next);
       kept = true;
-      await publishStory(next, setSavingLabel);
+      await publishStory(next, setStep);
       await putStory(next);
       try {
         await pruneStoryFiles(storyId, clips.map((clip) => clip.path));
-      } catch {
-        /* unused copies can wait */
+      } catch (error) {
+        report("could not prune unused clip files", error);
       }
       requestPersistentStorage();
       setDrafts([]);
@@ -804,7 +834,7 @@ export function UploadView({
       window.setTimeout(() => onSaved(next), 1100);
     } catch (caught) {
       if (!kept && !story) await discardStoryFiles(storyId);
-      setError(caught instanceof Error ? caught.message : "Couldn't save that story.");
+      setError(codeOf(caught));
       savingRef.current = false;
       setSaving(false);
     } finally {
@@ -824,8 +854,8 @@ export function UploadView({
           <div className="check-pop">
             <Check className="size-14" strokeWidth={3} aria-hidden="true" />
           </div>
-          <h2 className="font-display text-4xl font-semibold">Saved</h2>
-          <p className="text-lg font-bold text-muted">{story?.unwrapped ? "It's on the shelf." : "It's on the shelf, wrapped up."}</p>
+          <h2 className="font-display text-4xl font-semibold">{text.saved}</h2>
+          <p className="text-lg font-bold text-muted">{story?.unwrapped ? text.savedOpen : text.savedWrapped}</p>
         </div>
       </div>
     );
@@ -840,18 +870,19 @@ export function UploadView({
       }}
     >
       <header className="flex items-center gap-2 px-4 pt-4 pb-2">
-        <button type="button" className="icon-btn tap" onClick={askLeave} aria-label="Back to shelf">
+        <button type="button" className="icon-btn tap" onClick={askLeave} aria-label={text.back}>
           <ArrowLeft className="size-6" />
         </button>
-        <h1 className="font-display text-3xl font-semibold">{story ? "Edit story" : "New story"}</h1>
+        <h1 className="min-w-0 flex-1 font-display text-3xl font-semibold">{story ? text.editStory : text.newStory}</h1>
+        <LangSwitch />
       </header>
       <div className="upload-scroll grid flex-1 content-start gap-3 overflow-y-auto px-5 pt-2 pb-4">
         <label className="grid gap-2 font-extrabold text-ink">
-          Title
+          {text.title}
           <input
             className="field"
             value={title}
-            placeholder="Story from Oma"
+            placeholder={text.defaultTitle}
             onChange={(event) => setTitle(event.target.value)}
             maxLength={80}
             enterKeyHint="done"
@@ -860,11 +891,11 @@ export function UploadView({
         <div className="grid grid-cols-2 gap-3">
           <button type="button" className="choice tap" onClick={() => cameraRef.current?.click()}>
             <Camera className="size-7" aria-hidden="true" />
-            Camera
+            {text.camera}
           </button>
           <button type="button" className="choice tap" onClick={() => galleryRef.current?.click()}>
             <ImageIcon className="size-7" aria-hidden="true" />
-            Gallery
+            {text.gallery}
           </button>
         </div>
         <input
@@ -885,12 +916,12 @@ export function UploadView({
         />
         {reading ? (
           <p className="flex items-center gap-2 font-bold text-muted">
-            <span className="busy-dot" /> Reading clips
+            <span className="busy-dot" /> {text.reading}
           </p>
         ) : null}
         {error ? (
           <p className="rounded-3xl bg-card px-4 py-3 font-bold" role="alert">
-            {error}
+            {uiError(lang, error)}
           </p>
         ) : null}
         {drafts.length > 0 ? (
@@ -901,13 +932,13 @@ export function UploadView({
                   {index + 1}
                 </span>
                 <div className="min-w-0 flex-1">
-                  <p className="font-extrabold">Clip {index + 1}</p>
-                  <p className="font-bold text-muted">{formatLength(clip.durationMs)}</p>
+                  <p className="font-extrabold">{text.clip(index + 1)}</p>
+                  <p className="font-bold text-muted">{formatLength(clip.durationMs, lang)}</p>
                 </div>
                 <button
                   type="button"
                   className="icon-btn tap"
-                  aria-label={`Move clip ${index + 1} up`}
+                  aria-label={text.moveUp(index + 1)}
                   disabled={index === 0}
                   onClick={() => move(index, -1)}
                 >
@@ -916,7 +947,7 @@ export function UploadView({
                 <button
                   type="button"
                   className="icon-btn tap"
-                  aria-label={`Move clip ${index + 1} down`}
+                  aria-label={text.moveDown(index + 1)}
                   disabled={index === drafts.length - 1}
                   onClick={() => move(index, 1)}
                 >
@@ -925,7 +956,7 @@ export function UploadView({
                 <button
                   type="button"
                   className="icon-btn tap"
-                  aria-label={`Remove clip ${index + 1}`}
+                  aria-label={text.removeClip(index + 1)}
                   onClick={() => setDrafts((current) => current.filter((item) => item.key !== clip.key))}
                 >
                   <Trash2 className="size-5" />
@@ -934,19 +965,19 @@ export function UploadView({
             ))}
           </ol>
         ) : reading ? null : (
-          <p className="text-lg font-bold text-muted">Add one or more clips. They play in the order you set.</p>
+          <p className="text-lg font-bold text-muted">{text.addClips}</p>
         )}
-        {drafts.length > 1 ? <p className="font-bold text-muted">Together {formatLength(total)}</p> : null}
+        {drafts.length > 1 ? <p className="font-bold text-muted">{text.together} {formatLength(total, lang)}</p> : null}
         {coverClip ? (
           <CoverPicker
             file={coverClip.file}
             durationMs={coverClip.durationMs}
-            clipName={`clip ${drafts.findIndex((clip) => clip.key === coverClip.key) + 1}`}
+            clipName={text.clip(drafts.findIndex((clip) => clip.key === coverClip.key) + 1)}
             selectedKey={coverClip.key}
-            choices={drafts.map((clip, index) => ({ key: clip.key, label: `Clip ${index + 1}` }))}
+            choices={drafts.map((clip, index) => ({ key: clip.key, label: text.clip(index + 1) }))}
             initialCover={keepInitial && coverClip.key === firstKey.current ? (story?.cover ?? null) : null}
-            title={title.trim() || "Story from Oma"}
-            lengthLabel={formatLength(total)}
+            title={title.trim() || text.defaultTitle}
+            lengthLabel={formatLength(total, lang)}
             onChoose={setCoverClipKey}
             onCover={rememberCover}
           />
@@ -955,11 +986,11 @@ export function UploadView({
       <div className="sticky bottom-0 grid gap-2 bg-sky px-5 pt-2 pb-5">
         {error ? (
           <p className="font-bold" role="alert">
-            {error}
+            {uiError(lang, error)}
           </p>
         ) : null}
         <button className="btn-primary tap" type="submit" disabled={!canSave}>
-          {saving ? savingLabel : story ? "Save changes" : "Save story"}
+          {saveLabel(text, saving, step, story != null)}
         </button>
       </div>
       {confirmLeave ? (
@@ -972,14 +1003,14 @@ export function UploadView({
             onClick={(event) => event.stopPropagation()}
           >
             <h2 id="leave-title" className="font-display text-3xl font-semibold">
-              Leave without saving?
+              {text.leaveAsk}
             </h2>
-            <p className="text-lg font-bold text-muted">These clips stay where you picked them.</p>
+            <p className="text-lg font-bold text-muted">{text.leaveHint}</p>
             <button type="button" className="btn-primary tap" onClick={() => setConfirmLeave(false)}>
-              Keep editing
+              {text.keepEditing}
             </button>
             <button type="button" className="btn-quiet tap" onClick={onCancel}>
-              Leave
+              {text.leave}
             </button>
           </div>
         </div>
