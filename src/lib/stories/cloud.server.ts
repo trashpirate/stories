@@ -284,25 +284,19 @@ function originCovered(rule: CORSRule, origin: string): boolean {
 async function allowOrigin(value: string | undefined): Promise<void> {
   const origin = browserOrigin(value);
   if (!origin) throw new Error("Couldn't store that story from this site.");
-  let rules: CORSRule[] | null = null;
   try {
     const current = await r2().send(new GetBucketCorsCommand({ Bucket: bucket() }));
-    rules = current.CORSRules ?? [];
-  } catch {
-    // The token can still sign uploads when CORS was set in the dashboard.
-    return;
-  }
-  if (rules.some((rule) => originCovered(rule, origin))) return;
-  rules.push({
-    AllowedOrigins: [origin],
-    AllowedMethods: ["GET", "PUT", "HEAD"],
-    AllowedHeaders: ["*"],
-    ExposeHeaders: ["ETag", "Content-Length", "Content-Range"],
-    MaxAgeSeconds: 3600,
-  });
-  try {
+    const rules = current.CORSRules ?? [];
+    if (rules.some((rule) => originCovered(rule, origin))) return;
+    rules.push({
+      AllowedOrigins: [origin],
+      AllowedMethods: ["GET", "PUT", "HEAD"],
+      AllowedHeaders: ["*"],
+      ExposeHeaders: ["ETag", "Content-Length", "Content-Range"],
+      MaxAgeSeconds: 3600,
+    });
     await r2().send(new PutBucketCorsCommand({ Bucket: bucket(), CORSConfiguration: { CORSRules: rules } }));
   } catch {
-    throw new Error(`The bucket still blocks this site. In R2, allow GET, PUT, and HEAD from ${origin}.`);
+    // A saved dashboard rule is enough. Do not block the upload when this token cannot edit CORS.
   }
 }
