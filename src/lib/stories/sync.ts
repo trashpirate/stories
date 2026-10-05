@@ -1,9 +1,12 @@
 import { cloudStatus, deleteCloudStory, readCloudLibrary, signStoryPaths, unlockFamily, writeCloudStory } from "@/lib/stories/cloud.fn";
-import { putStory, removeStory } from "@/lib/stories/db";
-import { collapseTakes, stamp } from "@/lib/stories/identity";
+import { putStory } from "@/lib/stories/db";
 import { coverKey } from "@/lib/stories/keys";
 import { readClipFile, rememberStory } from "@/lib/stories/source";
 import type { CloudStory, Story } from "@/lib/stories/types";
+
+function stamp(story: { updatedAt?: number; createdAt: number }): number {
+  return story.updatedAt || story.createdAt || 0;
+}
 
 function toCloud(story: Story): CloudStory {
   return {
@@ -28,7 +31,22 @@ async function putSigned(url: string, body: Blob): Promise<void> {
 }
 
 /** Upload any local files we still have, then write the private shelf record. */
+const publishing = new Map<string, Promise<void>>();
+
 export async function publishStory(story: Story, onProgress?: (label: string) => void): Promise<void> {
+  const current = publishing.get(story.id);
+  if (current) {
+    await current;
+    return;
+  }
+  const run = uploadStory(story, onProgress).finally(() => {
+    if (publishing.get(story.id) === run) publishing.delete(story.id);
+  });
+  publishing.set(story.id, run);
+  await run;
+}
+
+async function uploadStory(story: Story, onProgress?: (label: string) => void): Promise<void> {
   const status = await cloudStatus();
   if (!status.enabled) return;
   if (!status.signedIn) throw new Error("Enter the family passphrase.");
@@ -63,24 +81,14 @@ export async function unpublishStory(story: Story): Promise<void> {
   await deleteCloudStory({ data: { id: story.id } });
 }
 
-async function oneCopy(stories: Story[]): Promise<Story[]> {
-  const merged = collapseTakes(stories);
-  const keep = new Set(merged.map((story) => story.id));
-  for (const story of stories) {
-    if (keep.has(story.id)) continue;
-    try {
-      await removeStory(story.id);
-    } catch {
-      /* the extra card is already hidden */
-    }
-  }
-  return merged;
+function byNewest(stories: Story[]): Story[] {
+  return [...stories].sort((a, b) => b.createdAt - a.createdAt);
 }
 
 /** Pull the private shelf, keep the newer copy of each story, and upload ones that exist only here. */
 export async function reconcileCloud(local: Story[]): Promise<Story[]> {
   const status = await cloudStatus();
-  if (!status.enabled || !status.signedIn) return oneCopy(local);
+  if (!status.enabled || !status.signedIn) return byNewest(local);
   const remote = await readCloudLibrary();
   const byId = new Map(local.map((story) => [story.id, story]));
   const remoteIds = new Set(remote.stories.map((story) => story.id));
@@ -110,7 +118,7 @@ export async function reconcileCloud(local: Story[]): Promise<Story[]> {
     }
   }
 
-  return oneCopy([...byId.values()]);
+  return byNewest([...byId.values()]);
 }
 
 export async function openFamilyShelf(passphrase: string): Promise<boolean> {

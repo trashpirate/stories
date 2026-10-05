@@ -11,7 +11,6 @@ import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 import { deleteCookie, getCookie, getRequestProtocol, setCookie } from "@tanstack/react-start/server";
 import { env } from "@/lib/env.server";
 import { isStoryId, isStoryObjectKey } from "@/lib/stories/keys";
-import { collapseTakes } from "@/lib/stories/identity";
 import type { CloudStory } from "@/lib/stories/types";
 
 const LIBRARY_KEY = "library/stories.json";
@@ -197,22 +196,13 @@ async function mutate(change: (stories: CloudStory[]) => CloudStory[]): Promise<
 
 export async function listStories(): Promise<CloudStory[]> {
   requireSession();
-  const current = await readLibrary();
-  const stories = collapseTakes(current.stories);
-  if (stories.length !== current.stories.length) {
-    try {
-      await writeLibrary(stories, current.etag);
-    } catch {
-      /* show one copy even if the extra record is still stored */
-    }
-  }
-  return stories;
+  return (await readLibrary()).stories;
 }
 
 export async function saveStory(input: CloudStory): Promise<{ ok: true }> {
   requireSession();
   const story = cleanStory(input);
-  await mutate((stories) => collapseTakes([...stories.filter((item) => item.id !== story.id), story]));
+  await mutate((stories) => [story, ...stories.filter((item) => item.id !== story.id)]);
   return { ok: true };
 }
 
