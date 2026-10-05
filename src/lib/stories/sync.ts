@@ -22,14 +22,26 @@ function toCloud(story: Story): CloudStory {
   };
 }
 
-async function putSigned(path: string, url: string, body: Blob): Promise<void> {
-  let response: Response;
-  try {
-    response = await fetch(url, { method: "PUT", body });
-  } catch (error) {
-    fail(CODE.save, `upload blocked for ${path}. Bucket CORS must allow PUT from this site.`, error);
+async function putSigned(path: string, body: Blob): Promise<void> {
+  let last: unknown;
+  for (let attempt = 1; attempt <= 3; attempt++) {
+    const signed = await signStoryPaths({ data: { puts: [path] } });
+    const url = signed.puts[0]?.url;
+    if (!url) fail(CODE.save, `no signed upload url for ${path}`);
+    try {
+      const response = await fetch(url, { method: "PUT", body });
+      if (response.ok) return;
+      last = { status: response.status };
+      report(`upload refused for ${path} on attempt ${attempt}`, last);
+      if (response.status !== 408 && response.status !== 429 && response.status < 500) {
+        fail(CODE.save, `upload refused for ${path}`, last);
+      }
+    } catch (error) {
+      last = error;
+      report(`upload did not finish for ${path} on attempt ${attempt}`, error);
+    }
   }
-  if (!response.ok) fail(CODE.save, `upload refused for ${path}`, { status: response.status });
+  fail(CODE.save, `upload did not finish for ${path}`, last);
 }
 
 /** Upload any local files we still have, then write the private shelf record. */
@@ -52,26 +64,29 @@ async function uploadStory(story: Story, onProgress?: (step: SaveStep) => void):
   const status = await cloudStatus();
   if (!status.enabled) return;
   if (!status.signedIn) fail(CODE.passphrase, "publish while signed out");
-  const bodies = new Map<string, Blob>();
-  bodies.set(coverKey(story.id), story.cover);
+  const steps: { path: string; load: () => Promise<Blob | null> }[] = [
+    { path: coverKey(story.id), load: async () => story.cover },
+  ];
   for (const clip of story.clips) {
-    try {
-      bodies.set(clip.path, await readClipFile(clip));
-    } catch {
-      /* this phone does not have the clip; the private copy is already stored */
-    }
+    steps.push({
+      path: clip.path,
+      load: async () => {
+        try {
+          return await readClipFile(clip);
+        } catch {
+          return null;
+        }
+      },
+    });
   }
-  const uploads = [...bodies.entries()];
   onProgress?.({ kind: "prepare" });
-  const signed = await signStoryPaths({ data: { puts: uploads.map(([path]) => path) } });
-  const urls = new Map(signed.puts.map((item) => [item.path, item.url]));
-  let clip = 0;
-  for (const [path, body] of uploads) {
-    const url = urls.get(path);
-    if (!url) fail(CODE.save, `no signed upload url for ${path}`);
-    clip += 1;
-    onProgress?.(clip === 1 ? { kind: "cover" } : { kind: "clip", n: clip - 1, total: uploads.length - 1 });
-    await putSigned(path, url, body);
+  let sent = 0;
+  for (const step of steps) {
+    const body = await step.load();
+    if (!body) continue;
+    sent += 1;
+    onProgress?.(sent === 1 ? { kind: "cover" } : { kind: "clip", n: sent - 1, total: steps.length - 1 });
+    await putSigned(step.path, body);
   }
   onProgress?.({ kind: "shelf" });
   await writeCloudStory({ data: toCloud(story) });
