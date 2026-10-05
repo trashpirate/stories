@@ -267,18 +267,32 @@ function browserOrigin(value: string | undefined): string | null {
   }
 }
 
+function originCovered(rule: CORSRule, origin: string): boolean {
+  const origins = rule.AllowedOrigins ?? [];
+  const methods = (rule.AllowedMethods ?? []).map((method) => method.toUpperCase());
+  const hostOk = origins.some((item) => {
+    if (item === "*") return true;
+    try {
+      return new URL(item).origin === origin;
+    } catch {
+      return item.replace(/\/$/, "") === origin;
+    }
+  });
+  return hostOk && (methods.includes("PUT") || methods.includes("*"));
+}
+
 async function allowOrigin(value: string | undefined): Promise<void> {
   const origin = browserOrigin(value);
   if (!origin) throw new Error("Couldn't store that story from this site.");
-  let rules: CORSRule[] = [];
+  let rules: CORSRule[] | null = null;
   try {
     const current = await r2().send(new GetBucketCorsCommand({ Bucket: bucket() }));
     rules = current.CORSRules ?? [];
   } catch {
-    rules = [];
+    // The token can still sign uploads when CORS was set in the dashboard.
+    return;
   }
-  const already = rules.some((rule) => (rule.AllowedOrigins ?? []).includes(origin) && (rule.AllowedMethods ?? []).includes("PUT"));
-  if (already) return;
+  if (rules.some((rule) => originCovered(rule, origin))) return;
   rules.push({
     AllowedOrigins: [origin],
     AllowedMethods: ["GET", "PUT", "HEAD"],
