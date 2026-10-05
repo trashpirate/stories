@@ -33,7 +33,7 @@ R2_SECRET_ACCESS_KEY=
 FAMILY_PASSPHRASE=
 ```
 
-Create an R2 API token that can read and write objects in that bucket only. Leave the bucket private: no public access, and no `r2.dev` website. The first successful passphrase sign-in tries to allow uploads from that site. If the token cannot edit CORS, add one rule by hand for the app's address, methods `GET`, `PUT`, and `HEAD`, and allowed headers `*`.
+Create an R2 API token that can read and write objects in that bucket only. Leave the bucket private: no public access, and no `r2.dev` website. Add one CORS rule for the app's address, methods `GET`, `PUT`, and `HEAD`, and allowed headers `*`. A token that cannot edit CORS is fine once that rule is saved. An origin of `*` is accepted too.
 
 Until those values are set, stories stay on the phone and the shelf says so.
 

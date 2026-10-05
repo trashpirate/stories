@@ -267,28 +267,36 @@ function browserOrigin(value: string | undefined): string | null {
   }
 }
 
+function originCovered(rule: CORSRule, origin: string): boolean {
+  const origins = rule.AllowedOrigins ?? [];
+  const methods = (rule.AllowedMethods ?? []).map((method) => method.toUpperCase());
+  const hostOk = origins.some((item) => {
+    if (item === "*") return true;
+    try {
+      return new URL(item).origin === origin;
+    } catch {
+      return item.replace(/\/$/, "") === origin;
+    }
+  });
+  return hostOk && (methods.includes("PUT") || methods.includes("*"));
+}
+
 async function allowOrigin(value: string | undefined): Promise<void> {
   const origin = browserOrigin(value);
   if (!origin) throw new Error("Couldn't store that story from this site.");
-  let rules: CORSRule[] = [];
   try {
     const current = await r2().send(new GetBucketCorsCommand({ Bucket: bucket() }));
-    rules = current.CORSRules ?? [];
-  } catch {
-    rules = [];
-  }
-  const already = rules.some((rule) => (rule.AllowedOrigins ?? []).includes(origin) && (rule.AllowedMethods ?? []).includes("PUT"));
-  if (already) return;
-  rules.push({
-    AllowedOrigins: [origin],
-    AllowedMethods: ["GET", "PUT", "HEAD"],
-    AllowedHeaders: ["*"],
-    ExposeHeaders: ["ETag", "Content-Length", "Content-Range"],
-    MaxAgeSeconds: 3600,
-  });
-  try {
+    const rules = current.CORSRules ?? [];
+    if (rules.some((rule) => originCovered(rule, origin))) return;
+    rules.push({
+      AllowedOrigins: [origin],
+      AllowedMethods: ["GET", "PUT", "HEAD"],
+      AllowedHeaders: ["*"],
+      ExposeHeaders: ["ETag", "Content-Length", "Content-Range"],
+      MaxAgeSeconds: 3600,
+    });
     await r2().send(new PutBucketCorsCommand({ Bucket: bucket(), CORSConfiguration: { CORSRules: rules } }));
   } catch {
-    throw new Error(`The bucket still blocks this site. In R2, allow GET, PUT, and HEAD from ${origin}.`);
+    // A saved dashboard rule is enough. Do not block the upload when this token cannot edit CORS.
   }
 }
