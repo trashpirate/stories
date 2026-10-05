@@ -11,7 +11,7 @@ import {
   type CORSRule,
 } from "@aws-sdk/client-s3";
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
-import { deleteCookie, getCookie, getRequestProtocol, getRequestUrl, setCookie } from "@tanstack/react-start/server";
+import { deleteCookie, getCookie, getRequestHeader, getRequestProtocol, setCookie } from "@tanstack/react-start/server";
 import { env } from "@/lib/env.server";
 import { isStoryId, isStoryObjectKey } from "@/lib/stories/keys";
 import type { CloudStory } from "@/lib/stories/types";
@@ -98,7 +98,7 @@ export function unlock(passphrase: string): { ok: true } | { ok: false } {
   if (!configured()) return { ok: false };
   if (!sameSecret(passphrase, required("FAMILY_PASSPHRASE"))) return { ok: false };
   setCookie(COOKIE, seal(Date.now() + MONTH * 1000), cookieOptions());
-  void allowThisOrigin();
+  void allowOrigin(getRequestHeader("origin"));
   return { ok: true };
 }
 
@@ -131,15 +131,33 @@ async function readLibrary(): Promise<{ stories: CloudStory[]; etag?: string }> 
 }
 
 async function writeLibrary(stories: CloudStory[], etag?: string): Promise<void> {
-  await r2().send(
-    new PutObjectCommand({
-      Bucket: bucket(),
-      Key: LIBRARY_KEY,
-      Body: JSON.stringify({ stories }),
-      ContentType: "application/json",
-      ...(etag ? { IfMatch: etag } : { IfNoneMatch: "*" }),
-    }),
-  );
+  const body = JSON.stringify({ stories });
+  try {
+    await r2().send(
+      new PutObjectCommand({
+        Bucket: bucket(),
+        Key: LIBRARY_KEY,
+        Body: body,
+        ContentType: "application/json",
+        ...(etag ? { IfMatch: etag } : {}),
+      }),
+    );
+  } catch (error) {
+    const status = (error as { $metadata?: { httpStatusCode?: number } }).$metadata?.httpStatusCode;
+    if (etag && (status === 412 || status === 409)) throw error;
+    if (etag) {
+      await r2().send(
+        new PutObjectCommand({
+          Bucket: bucket(),
+          Key: LIBRARY_KEY,
+          Body: body,
+          ContentType: "application/json",
+        }),
+      );
+      return;
+    }
+    throw new Error("Couldn't save the private shelf.");
+  }
 }
 
 function cleanStory(input: CloudStory): CloudStory {
@@ -212,8 +230,13 @@ export async function removeStory(id: string): Promise<{ ok: true }> {
   return { ok: true };
 }
 
-export async function signPaths(puts: string[], gets: string[]): Promise<{ puts: { path: string; url: string }[]; gets: { path: string; url: string }[] }> {
+export async function signPaths(
+  puts: string[],
+  gets: string[],
+  origin: string,
+): Promise<{ puts: { path: string; url: string }[]; gets: { path: string; url: string }[] }> {
   requireSession();
+  await allowOrigin(origin || getRequestHeader("origin"));
   const signedPuts = await Promise.all(
     puts.map(async (path) => {
       assertKey(path);
@@ -231,14 +254,22 @@ export async function signPaths(puts: string[], gets: string[]): Promise<{ puts:
   return { puts: signedPuts, gets: signedGets };
 }
 
-async function allowThisOrigin(): Promise<void> {
-  let origin = "";
+function browserOrigin(value: string | undefined): string | null {
+  if (!value) return null;
   try {
-    origin = new URL(getRequestUrl()).origin;
+    const url = new URL(value);
+    if (url.origin !== value) return null;
+    if (url.protocol === "https:") return url.origin;
+    if (url.protocol === "http:" && (url.hostname === "localhost" || url.hostname === "127.0.0.1")) return url.origin;
+    return null;
   } catch {
-    return;
+    return null;
   }
-  if (!origin || origin === "null") return;
+}
+
+async function allowOrigin(value: string | undefined): Promise<void> {
+  const origin = browserOrigin(value);
+  if (!origin) throw new Error("Couldn't store that story from this site.");
   let rules: CORSRule[] = [];
   try {
     const current = await r2().send(new GetBucketCorsCommand({ Bucket: bucket() }));
@@ -258,6 +289,6 @@ async function allowThisOrigin(): Promise<void> {
   try {
     await r2().send(new PutBucketCorsCommand({ Bucket: bucket(), CORSConfiguration: { CORSRules: rules } }));
   } catch {
-    /* the token may not be allowed to edit CORS; uploads then need a rule added by hand */
+    throw new Error(`The bucket still blocks this site. In R2, allow GET, PUT, and HEAD from ${origin}.`);
   }
 }

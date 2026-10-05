@@ -593,6 +593,8 @@ export function UploadView({
   const galleryRef = useRef<HTMLInputElement>(null);
   const seenKey = useRef("");
   const firstKey = useRef("");
+  const storyIdRef = useRef(story?.id ?? crypto.randomUUID());
+  const savingRef = useRef(false);
   const [title, setTitle] = useState(story?.title ?? "");
   const [drafts, setDrafts] = useState<DraftClip[]>([]);
   const [cover, setCover] = useState<Blob | null>(null);
@@ -601,6 +603,7 @@ export function UploadView({
   const [keepInitial, setKeepInitial] = useState(story != null);
   const [reading, setReading] = useState(story != null);
   const [saving, setSaving] = useState(false);
+  const [savingLabel, setSavingLabel] = useState("Saving…");
   const [saved, setSaved] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [confirmLeave, setConfirmLeave] = useState(false);
@@ -692,10 +695,12 @@ export function UploadView({
   }
 
   async function save() {
-    if (!canSave || !cover) return;
+    if (!canSave || !cover || savingRef.current) return;
+    savingRef.current = true;
     setSaving(true);
+    setSavingLabel("Saving…");
     setError(null);
-    const storyId = story?.id ?? crypto.randomUUID();
+    const storyId = storyIdRef.current;
     let kept = false;
     try {
       const clips = [];
@@ -715,8 +720,8 @@ export function UploadView({
       };
       await rememberStory(next);
       kept = true;
+      await publishStory(next, setSavingLabel);
       await putStory(next);
-      await publishStory(next);
       try {
         await pruneStoryFiles(storyId, clips.map((clip) => clip.path));
       } catch {
@@ -730,6 +735,7 @@ export function UploadView({
     } catch (caught) {
       if (!kept && !story) await discardStoryFiles(storyId);
       setError(caught instanceof Error ? caught.message : "Couldn't save that story.");
+      savingRef.current = false;
       setSaving(false);
     }
   }
@@ -874,9 +880,14 @@ export function UploadView({
           />
         ) : null}
       </div>
-      <div className="sticky bottom-0 bg-sky px-5 pt-2 pb-5">
+      <div className="sticky bottom-0 grid gap-2 bg-sky px-5 pt-2 pb-5">
+        {error ? (
+          <p className="font-bold" role="alert">
+            {error}
+          </p>
+        ) : null}
         <button className="btn-primary tap" type="submit" disabled={!canSave}>
-          {saving ? "Saving…" : story ? "Save changes" : "Save story"}
+          {saving ? savingLabel : story ? "Save changes" : "Save story"}
         </button>
       </div>
       {confirmLeave ? (

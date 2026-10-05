@@ -39,11 +39,12 @@ export const deleteCloudStory = createServerFn({ method: "POST" })
   });
 
 export const signStoryPaths = createServerFn({ method: "POST" })
-  .validator((data: { puts?: string[]; gets?: string[] }) => ({
+  .validator((data: { puts?: string[]; gets?: string[]; origin?: string }) => ({
     puts: Array.isArray(data?.puts) ? data.puts.filter((item) => typeof item === "string") : [],
     gets: Array.isArray(data?.gets) ? data.gets.filter((item) => typeof item === "string") : [],
+    origin: typeof data?.origin === "string" ? data.origin : "",
   }))
   .handler(async ({ data }) => {
     const { signPaths } = await import("./cloud.server");
-    return signPaths(data.puts, data.gets);
+    return signPaths(data.puts, data.gets, data.origin);
   });
