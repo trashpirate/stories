@@ -23,7 +23,7 @@ function configured(): boolean {
 
 function required(key: string): string {
   const value = env(key);
-  if (!value) throw new Error("Private storage is not set up yet.");
+  if (!value) throw new Error("Der private Speicher ist noch nicht eingerichtet.");
   return value;
 }
 
@@ -104,12 +104,12 @@ export function lock(): { ok: true } {
 }
 
 function requireSession(): void {
-  if (!configured()) throw new Error("Private storage is not set up yet.");
-  if (!sessionValid(getCookie(COOKIE))) throw new Error("Enter the family passphrase.");
+  if (!configured()) throw new Error("Der private Speicher ist noch nicht eingerichtet.");
+  if (!sessionValid(getCookie(COOKIE))) throw new Error("Gib das Familienpasswort ein.");
 }
 
 function assertKey(path: string): void {
-  if (!isStoryObjectKey(path)) throw new Error("Couldn't store that file.");
+  if (!isStoryObjectKey(path)) throw new Error("Die Datei ließ sich nicht speichern.");
 }
 
 async function readLibrary(): Promise<{ stories: CloudStory[]; etag?: string }> {
@@ -122,7 +122,7 @@ async function readLibrary(): Promise<{ stories: CloudStory[]; etag?: string }> 
     if (error instanceof NoSuchKey || (error as { name?: string }).name === "NoSuchKey") return { stories: [] };
     const status = (error as { $metadata?: { httpStatusCode?: number } }).$metadata?.httpStatusCode;
     if (status === 404) return { stories: [] };
-    throw new Error("Couldn't open the private shelf.");
+    throw new Error("Das private Regal ließ sich nicht öffnen.");
   }
 }
 
@@ -152,19 +152,19 @@ async function writeLibrary(stories: CloudStory[], etag?: string): Promise<void>
       );
       return;
     }
-    throw new Error("Couldn't save the private shelf.");
+    throw new Error("Das private Regal ließ sich nicht speichern.");
   }
 }
 
 function cleanStory(input: CloudStory): CloudStory {
-  if (!isStoryId(input.id)) throw new Error("Couldn't store that story.");
-  if (!input.title.trim() || input.title.length > 120) throw new Error("Couldn't store that story.");
+  if (!isStoryId(input.id)) throw new Error("Die Geschichte ließ sich nicht speichern.");
+  if (!input.title.trim() || input.title.length > 120) throw new Error("Die Geschichte ließ sich nicht speichern.");
   if (!Array.isArray(input.clips) || input.clips.length === 0 || input.clips.length > 40) {
-    throw new Error("Couldn't store that story.");
+    throw new Error("Die Geschichte ließ sich nicht speichern.");
   }
   const clips = input.clips.map((clip) => {
     assertKey(clip.path);
-    if (!clip.path.startsWith(`stories/${input.id}/`)) throw new Error("Couldn't store that story.");
+    if (!clip.path.startsWith(`stories/${input.id}/`)) throw new Error("Die Geschichte ließ sich nicht speichern.");
     return { path: clip.path, durationMs: Math.max(0, Math.round(clip.durationMs)) };
   });
   return {
@@ -188,10 +188,10 @@ async function mutate(change: (stories: CloudStory[]) => CloudStory[]): Promise<
     } catch (error) {
       const status = (error as { $metadata?: { httpStatusCode?: number } }).$metadata?.httpStatusCode;
       if (status === 412 || status === 409) continue;
-      throw new Error("Couldn't save the private shelf.");
+      throw new Error("Das private Regal ließ sich nicht speichern.");
     }
   }
-  throw new Error("Couldn't save the private shelf.");
+  throw new Error("Das private Regal ließ sich nicht speichern.");
 }
 
 export async function listStories(): Promise<CloudStory[]> {
@@ -208,7 +208,7 @@ export async function saveStory(input: CloudStory): Promise<{ ok: true }> {
 
 export async function removeStory(id: string): Promise<{ ok: true }> {
   requireSession();
-  if (!isStoryId(id)) throw new Error("Couldn't remove that story.");
+  if (!isStoryId(id)) throw new Error("Die Geschichte ließ sich nicht entfernen.");
   const listed = await r2().send(new ListObjectsV2Command({ Bucket: bucket(), Prefix: `stories/${id}/` }));
   const keys = (listed.Contents ?? []).map((item) => item.Key).filter((key): key is string => Boolean(key));
   if (keys.length > 0) {

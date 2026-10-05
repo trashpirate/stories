@@ -125,7 +125,7 @@ export function StoriesApp() {
         })
         .catch(() => {
           if (!cancel) {
-            setShelfError("Couldn't open the shelf on this phone.");
+            setShelfError("Das Regal ließ sich auf diesem Handy nicht öffnen.");
             setStories((current) => current ?? []);
           }
         });
@@ -230,7 +230,7 @@ export function StoriesApp() {
         await goTo(story, index + 1);
         return;
       }
-      setShelfError("That story couldn't play.");
+      setShelfError("Diese Geschichte ließ sich nicht abspielen.");
       closePlayer();
     }
   }, [closePlayer]);
@@ -253,7 +253,7 @@ export function StoriesApp() {
 
   async function openStory(story: Story) {
     if (!story.clips.length) {
-      setShelfError("That story has no clips.");
+      setShelfError("Diese Geschichte hat keine Clips.");
       return;
     }
     const ticket = ++flightRef.current;
@@ -265,7 +265,7 @@ export function StoriesApp() {
     try {
       url = await primed;
     } catch (error) {
-      setShelfError(error instanceof Error ? error.message : "That story couldn't be opened.");
+      setShelfError(error instanceof Error ? error.message : "Diese Geschichte ließ sich nicht öffnen.");
       return;
     }
     if (ticket !== flightRef.current) {
@@ -302,7 +302,7 @@ export function StoriesApp() {
         void publishStory(opened);
       } catch {
         setStories((list) => list?.map((item) => (item.id === story.id ? story : item)) ?? list);
-        setShelfError("Couldn't open that present.");
+        setShelfError("Das Geschenk ließ sich nicht öffnen.");
         closePlayer();
       }
       return;
@@ -332,7 +332,7 @@ export function StoriesApp() {
       void goTo(current.story, current.index + 1);
       return;
     }
-    setShelfError("That story couldn't play.");
+    setShelfError("Diese Geschichte ließ sich nicht abspielen.");
     closePlayer();
   }
 
@@ -463,7 +463,7 @@ export function StoriesApp() {
       await unpublishStory(story);
       setStories((list) => (list ?? []).filter((item) => item.id !== story.id));
     } catch {
-      setShelfError("Couldn't remove that story.");
+      setShelfError("Die Geschichte ließ sich nicht entfernen.");
     }
   }
 
@@ -553,7 +553,7 @@ export function StoriesApp() {
     try {
       const ok = await openFamilyShelf(passphrase);
       if (!ok) {
-        setGateError("That passphrase does not open the shelf.");
+        setGateError("Dieses Passwort öffnet das Regal nicht.");
         setOpening(false);
         return;
       }
@@ -561,7 +561,7 @@ export function StoriesApp() {
       setOpening(false);
       setGate("open");
     } catch {
-      setGateError("Couldn't open the private shelf.");
+      setGateError("Das private Regal ließ sich nicht öffnen.");
       setOpening(false);
     }
   }
@@ -570,8 +570,8 @@ export function StoriesApp() {
     return (
       <main className="app-shell min-h-dvh bg-sky text-ink">
         <form className="mx-auto grid min-h-dvh w-full max-w-lg content-center gap-4 px-5" onSubmit={(event) => void submitPassphrase(event)}>
-          <h1 className="font-display text-4xl font-semibold">Stories</h1>
-          <p className="text-lg font-bold text-muted">{gate === "checking" ? "Opening the shelf." : "This shelf is private."}</p>
+          <h1 className="font-display text-4xl font-semibold">Geschichten</h1>
+          <p className="text-lg font-bold text-muted">{gate === "checking" ? "Das Regal wird geöffnet." : "Dieses Regal ist privat."}</p>
           {gate === "locked" ? (
             <>
               <input
@@ -579,7 +579,7 @@ export function StoriesApp() {
                 name="passphrase"
                 autoComplete="current-password"
                 className="min-h-14 rounded-3xl bg-card px-4 text-lg font-bold shadow-lift"
-                placeholder="Family passphrase"
+                placeholder="Familienpasswort"
                 value={passphrase}
                 onChange={(event) => setPassphrase(event.target.value)}
               />
@@ -589,7 +589,7 @@ export function StoriesApp() {
                 </p>
               ) : null}
               <button type="submit" className="btn-primary tap" disabled={opening || passphrase.length === 0}>
-                {opening ? "Opening" : "Open"}
+                {opening ? "Wird geöffnet" : "Öffnen"}
               </button>
             </>
           ) : null}
@@ -632,23 +632,23 @@ export function StoriesApp() {
                   onPointerDown={(event) => event.stopPropagation()}
                   onClick={() => togglePause()}
                 >
-                  Play
+                  Abspielen
                 </button>
               ) : null}
               <span className="sr-only">
-                {paused ? "Paused." : "Playing."} Tap the picture to show the buttons.
+                {paused ? "Pausiert." : "Es läuft."} Tippe auf das Bild, um die Knöpfe zu sehen.
               </span>
             </div>
             <div className={chromeOn ? "player-chrome" : "player-chrome is-hidden"} inert={chromeOn ? undefined : true}>
               <div className="player-top">
                 <button type="button" className="shelf-back tap" onClick={closePlayer}>
                   <ArrowLeft className="size-6" aria-hidden="true" />
-                  Shelf
+                  Regal
                 </button>
                 <button
                   type="button"
                   className="full-btn tap"
-                  aria-label={fullOn ? "Leave full screen" : "Full screen"}
+                  aria-label={fullOn ? "Vollbild verlassen" : "Vollbild"}
                   onClick={() => void toggleFullscreen()}
                 >
                   {fullOn ? (
@@ -662,7 +662,7 @@ export function StoriesApp() {
                 <button
                   type="button"
                   className="play-toggle tap"
-                  aria-label={paused || needsTap ? "Play" : "Pause"}
+                  aria-label={paused || needsTap ? "Abspielen" : "Pause"}
                   onClick={() => {
                     wakeChrome();
                     togglePause();
@@ -683,7 +683,7 @@ export function StoriesApp() {
                     className="scrub"
                     role="slider"
                     tabIndex={0}
-                    aria-label="Move through the story"
+                    aria-label="Durch die Geschichte springen"
                     aria-valuemin={0}
                     aria-valuemax={storySpan(mode.story)}
                     aria-valuenow={Math.min(positionMs, storySpan(mode.story))}
@@ -749,18 +749,18 @@ export function StoriesApp() {
           <>
             <header className="flex items-center justify-between gap-3 px-5 pt-5 pb-3">
               <div>
-                <h1 className="font-display text-4xl font-semibold">Stories</h1>
-                {phoneOnly ? <p className="font-bold text-muted">On this phone only.</p> : null}
+                <h1 className="font-display text-4xl font-semibold">Geschichten</h1>
+                {phoneOnly ? <p className="font-bold text-muted">Nur auf diesem Handy.</p> : null}
               </div>
               <button
                 type="button"
                 role="switch"
                 aria-checked={kids}
-                aria-label="Kids mode"
+                aria-label="Kindermodus"
                 className="tap flex min-h-12 items-center gap-2 rounded-full bg-card px-3 py-2 shadow-lift"
                 onClick={() => setKids(!kids)}
               >
-                <span className="font-extrabold">Kids</span>
+                <span className="font-extrabold">Kinder</span>
                 <span className={kids ? "switch-track on" : "switch-track"}>
                   <span className="switch-knob" />
                 </span>
@@ -770,8 +770,8 @@ export function StoriesApp() {
               <div className="grid gap-3 px-5 pb-4">
                 <label className="limit-card">
                   <span className="flex items-baseline justify-between gap-3">
-                    <span className="font-extrabold">Kids shelf</span>
-                    <span className="font-extrabold text-cobalt">Up to {maxMinutes} min</span>
+                    <span className="font-extrabold">Kinderregal</span>
+                    <span className="font-extrabold text-cobalt">Bis {maxMinutes} Min.</span>
                   </span>
                   <input
                     className="limit-slider"
@@ -780,14 +780,14 @@ export function StoriesApp() {
                     max={Math.max(longestMinutes, maxMinutes)}
                     step={1}
                     value={maxMinutes}
-                    aria-valuetext={`${maxMinutes} minutes`}
+                    aria-valuetext={`${maxMinutes} Minuten`}
                     onChange={(event) => setMaxMinutes(Number(event.target.value))}
                   />
-                  <span className="text-base font-bold text-muted">Longer stories stay hidden in Kids mode.</span>
+                  <span className="text-base font-bold text-muted">Längere Geschichten bleiben im Kindermodus versteckt.</span>
                 </label>
                 <button type="button" className="btn-primary tap" onClick={() => setMode({ type: "upload", story: null })}>
                   <Plus className="size-6" aria-hidden="true" />
-                  New story
+                  Neue Geschichte
                 </button>
               </div>
             ) : null}
@@ -798,28 +798,28 @@ export function StoriesApp() {
             ) : null}
             {stories === null ? (
               <p className="flex items-center gap-2 px-5 font-bold text-muted">
-                <span className="busy-dot" /> Opening the shelf
+                <span className="busy-dot" /> Das Regal wird geöffnet
               </p>
             ) : stories.length === 0 ? (
               <section className="mx-5 rounded-card bg-card px-5 py-8 text-center shadow-lift">
-                <h2 className="font-display text-3xl font-semibold">The shelf is clear</h2>
+                <h2 className="font-display text-3xl font-semibold">Das Regal ist leer</h2>
                 <p className="mt-2 text-lg font-bold text-muted">
-                  {kids ? "Nothing to watch yet." : "Add a story and it shows up here as a present."}
+                  {kids ? "Noch nichts zum Anschauen." : "Füge eine Geschichte hinzu. Sie erscheint hier als Geschenk."}
                 </p>
               </section>
             ) : visible.length === 0 ? (
               <section className="mx-5 rounded-card bg-card px-5 py-8 text-center shadow-lift">
-                <h2 className="font-display text-3xl font-semibold">Nothing to watch yet</h2>
-                <p className="mt-2 text-lg font-bold text-muted">Shorter stories will show up here.</p>
+                <h2 className="font-display text-3xl font-semibold">Noch nichts zum Anschauen</h2>
+                <p className="mt-2 text-lg font-bold text-muted">Kürzere Geschichten erscheinen hier.</p>
               </section>
             ) : (
-              <div className="shelf-row" role="list" aria-label="Stories">
+              <div className="shelf-row" role="list" aria-label="Geschichten">
                 {visible.map((story) => (
                   <article key={story.id} className="story-card" role="listitem">
                     <button
                       type="button"
                       className="tap relative block w-full overflow-hidden rounded-card bg-card text-left shadow-lift"
-                      aria-label={story.unwrapped ? story.title : "Present"}
+                      aria-label={story.unwrapped ? story.title : "Geschenk"}
                       onPointerDown={() => prime(story)}
                       onClick={() => void openStory(story)}
                     >
@@ -840,7 +840,7 @@ export function StoriesApp() {
                         <button
                           type="button"
                           className="tap absolute top-2 left-2 grid size-11 place-items-center rounded-full bg-card text-cobalt shadow-lift"
-                          aria-label={story.unwrapped ? `Edit ${story.title}` : "Edit present"}
+                          aria-label={story.unwrapped ? `${story.title} bearbeiten` : "Geschenk bearbeiten"}
                           onPointerDown={(event) => event.stopPropagation()}
                           onClick={() => setMode({ type: "upload", story })}
                         >
@@ -849,7 +849,7 @@ export function StoriesApp() {
                         <button
                           type="button"
                           className="tap absolute top-2 right-2 grid size-11 place-items-center rounded-full bg-card text-cobalt shadow-lift"
-                          aria-label={story.unwrapped ? `Delete ${story.title}` : "Delete present"}
+                          aria-label={story.unwrapped ? `${story.title} löschen` : "Geschenk löschen"}
                           onPointerDown={(event) => event.stopPropagation()}
                           onClick={() => setPendingDelete(story)}
                         >
@@ -875,14 +875,14 @@ export function StoriesApp() {
             onClick={(event) => event.stopPropagation()}
           >
             <h2 id="delete-title" className="font-display text-3xl font-semibold">
-              Delete this story?
+              Diese Geschichte löschen?
             </h2>
-            <p className="text-lg font-bold text-muted">It leaves the shelf.</p>
+            <p className="text-lg font-bold text-muted">Sie verschwindet vom Regal.</p>
             <button ref={keepRef} type="button" className="btn-primary tap" onClick={() => setPendingDelete(null)}>
-              Keep
+              Behalten
             </button>
             <button type="button" className="btn-quiet tap" onClick={() => void confirmDelete()}>
-              Delete
+              Löschen
             </button>
           </div>
         </div>

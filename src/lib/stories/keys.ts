@@ -10,6 +10,6 @@ export function isStoryObjectKey(path: string): boolean {
 }
 
 export function coverKey(storyId: string): string {
-  if (!isStoryId(storyId)) throw new Error("Couldn't store that story.");
+  if (!isStoryId(storyId)) throw new Error("Die Geschichte ließ sich nicht speichern.");
   return `stories/${storyId}/cover.jpg`;
 }

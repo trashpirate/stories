@@ -3,7 +3,7 @@ import { AuthProvider } from "@/lib/auth/provider";
 import { PreviewHostBridge } from "@/components/preview-host-bridge";
 import appCss from "../styles.css?url";
 
-const APP_NAME = "Stories";
+const APP_NAME = "Geschichten";
 
 export const Route = createRootRoute({
   head: () => ({
@@ -21,7 +21,7 @@ export const Route = createRootRoute({
     ],
   }),
   component: () => (
-    <html lang="en" className="antialiased" suppressHydrationWarning>
+    <html lang="de" className="antialiased" suppressHydrationWarning>
       <head>
         <HeadContent />
       </head>

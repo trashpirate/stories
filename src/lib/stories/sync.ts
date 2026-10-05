@@ -25,9 +25,9 @@ async function putSigned(url: string, body: Blob): Promise<void> {
   try {
     response = await fetch(url, { method: "PUT", body });
   } catch {
-    throw new Error("The private bucket blocked that upload. Allow this site to PUT files in the bucket CORS settings.");
+    throw new Error("Der private Speicher hat den Upload blockiert. Erlaube dieser Seite in den CORS-Einstellungen, Dateien zu senden (PUT).");
   }
-  if (!response.ok) throw new Error("The private bucket refused that file.");
+  if (!response.ok) throw new Error("Der private Speicher hat die Datei abgelehnt.");
 }
 
 /** Upload any local files we still have, then write the private shelf record. */
@@ -49,7 +49,7 @@ export async function publishStory(story: Story, onProgress?: (label: string) =>
 async function uploadStory(story: Story, onProgress?: (label: string) => void): Promise<void> {
   const status = await cloudStatus();
   if (!status.enabled) return;
-  if (!status.signedIn) throw new Error("Enter the family passphrase.");
+  if (!status.signedIn) throw new Error("Gib das Familienpasswort ein.");
   const bodies = new Map<string, Blob>();
   bodies.set(coverKey(story.id), story.cover);
   for (const clip of story.clips) {
@@ -60,18 +60,18 @@ async function uploadStory(story: Story, onProgress?: (label: string) => void): 
     }
   }
   const uploads = [...bodies.entries()];
-  onProgress?.("Asking for a private upload…");
+  onProgress?.("Privater Upload wird vorbereitet…");
   const signed = await signStoryPaths({ data: { puts: uploads.map(([path]) => path) } });
   const urls = new Map(signed.puts.map((item) => [item.path, item.url]));
   let clip = 0;
   for (const [path, body] of uploads) {
     const url = urls.get(path);
-    if (!url) throw new Error("Couldn't store that story privately.");
+    if (!url) throw new Error("Die Geschichte ließ sich nicht privat speichern.");
     clip += 1;
-    onProgress?.(clip === 1 ? "Saving the cover…" : `Saving clip ${clip - 1} of ${uploads.length - 1}…`);
+    onProgress?.(clip === 1 ? "Titelbild wird gespeichert…" : `Clip ${clip - 1} von ${uploads.length - 1} wird gespeichert…`);
     await putSigned(url, body);
   }
-  onProgress?.("Saving the shelf…");
+  onProgress?.("Das Regal wird gespeichert…");
   await writeCloudStory({ data: toCloud(story) });
 }
 

@@ -1,6 +1,6 @@
 # Stories
 
-A private family shelf for video stories. One phone, no accounts. Clips stay on the device.
+A private family shelf for video stories. One phone, no accounts. Clips stay on the device. The interface is in German.
 
 ## What it does
 

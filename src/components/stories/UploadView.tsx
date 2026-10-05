@@ -31,7 +31,7 @@ function probeDuration(file: File): Promise<number> {
       URL.revokeObjectURL(url);
       video.removeAttribute("src");
       video.load();
-      if (ms == null) reject(new Error("Couldn't read that clip"));
+      if (ms == null) reject(new Error("Dieser Clip ließ sich nicht lesen"));
       else resolve(ms);
     };
     video.onloadedmetadata = () => {
@@ -144,10 +144,10 @@ function captureFrame(video: HTMLVideoElement): Promise<Blob> {
   canvas.width = Math.max(1, Math.round(width * scale));
   canvas.height = Math.max(1, Math.round(height * scale));
   const ctx = canvas.getContext("2d");
-  if (!ctx) return Promise.reject(new Error("Couldn't draw the cover"));
+  if (!ctx) return Promise.reject(new Error("Das Titelbild ließ sich nicht zeichnen"));
   ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
   return new Promise((resolve, reject) => {
-    canvas.toBlob((blob) => (blob ? resolve(blob) : reject(new Error("Couldn't save the cover"))), "image/jpeg", 0.86);
+    canvas.toBlob((blob) => (blob ? resolve(blob) : reject(new Error("Das Titelbild ließ sich nicht speichern"))), "image/jpeg", 0.86);
   });
 }
 
@@ -195,15 +195,15 @@ function cropView(blob: Blob, view: CoverView, stageW: number, stageH: number): 
       canvas.height = 960;
       const ctx = canvas.getContext("2d");
       if (!ctx || sw < 1 || sh < 1) {
-        reject(new Error("Couldn't draw the cover"));
+        reject(new Error("Das Titelbild ließ sich nicht zeichnen"));
         return;
       }
       ctx.drawImage(image, sx, sy, sw, sh, 0, 0, canvas.width, canvas.height);
-      canvas.toBlob((next) => (next ? resolve(next) : reject(new Error("Couldn't save the cover"))), "image/jpeg", 0.86);
+      canvas.toBlob((next) => (next ? resolve(next) : reject(new Error("Das Titelbild ließ sich nicht speichern"))), "image/jpeg", 0.86);
     };
     image.onerror = () => {
       URL.revokeObjectURL(url);
-      reject(new Error("Couldn't read the cover"));
+      reject(new Error("Das Titelbild ließ sich nicht lesen"));
     };
     image.src = url;
   });
@@ -282,7 +282,7 @@ function CoverPicker({
         if (token === cropToken.current) onCoverRef.current(cropped);
       })
       .catch(() => {
-        if (token === cropToken.current) setError("Couldn't save that frame.");
+        if (token === cropToken.current) setError("Dieses Bild ließ sich nicht speichern.");
       });
   }
 
@@ -369,7 +369,7 @@ function CoverPicker({
     };
 
     run().catch(() => {
-      if (!cancel) setError("Couldn't read a cover from this clip.");
+      if (!cancel) setError("Aus diesem Clip ließ sich kein Titelbild lesen.");
     });
 
     return () => {
@@ -396,7 +396,7 @@ function CoverPicker({
       showLoose(url);
       publish(blob);
     } catch {
-      if (token === scrubToken.current) setError("Couldn't read that frame.");
+      if (token === scrubToken.current) setError("Dieses Bild ließ sich nicht lesen.");
     }
   }
 
@@ -555,7 +555,7 @@ function CoverPicker({
   return (
     <section className="grid gap-2">
       {choices.length > 1 ? (
-        <div ref={clipRowRef} className="clip-row flex gap-2 overflow-x-auto pb-1" role="tablist" aria-label="Choose a clip for the cover">
+        <div ref={clipRowRef} className="clip-row flex gap-2 overflow-x-auto pb-1" role="tablist" aria-label="Clip für das Titelbild wählen">
           {choices.map((choice) => {
             const selected = choice.key === selectedKey;
             return (
@@ -585,8 +585,8 @@ function CoverPicker({
       ) : null}
       <label className="grid gap-1 font-bold text-ink">
         <span className="flex items-baseline justify-between gap-3">
-          <span>Seek {clipName}</span>
-          <span className="tabular-nums text-muted">{usingExisting ? "Current cover" : formatClock(timeMs)}</span>
+          <span>Stelle in {clipName}</span>
+          <span className="tabular-nums text-muted">{usingExisting ? "Aktuelles Titelbild" : formatClock(timeMs)}</span>
         </span>
         <input
           className="clip-seek"
@@ -596,7 +596,7 @@ function CoverPicker({
           step={50}
           value={Math.min(timeMs, max)}
           disabled={!ready}
-          aria-label={`Seek ${clipName}`}
+          aria-label={`Stelle in ${clipName}`}
           style={{ ["--seek" as string]: `${max ? (Math.min(timeMs, max) / max) * 100 : 0}%` }}
           onChange={(event) => onScrub(Number(event.target.value))}
           onPointerDown={beginHold}
@@ -609,7 +609,7 @@ function CoverPicker({
         className="cover-stage"
         role="img"
         tabIndex={0}
-        aria-label="Cover. Drag to move the picture. Pinch or scroll to zoom."
+        aria-label="Titelbild. Ziehe das Bild zum Verschieben. Mit zwei Fingern oder Scrollen vergrößern."
         onPointerDown={onPanStart}
         onPointerMove={onPanMove}
         onPointerUp={onPanEnd}
@@ -672,7 +672,7 @@ export function UploadView({
   const [keepInitial, setKeepInitial] = useState(story != null);
   const [reading, setReading] = useState(story != null);
   const [saving, setSaving] = useState(false);
-  const [savingLabel, setSavingLabel] = useState("Saving…");
+  const [savingLabel, setSavingLabel] = useState("Wird gespeichert…");
   const [saved, setSaved] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [confirmLeave, setConfirmLeave] = useState(false);
@@ -695,7 +695,7 @@ export function UploadView({
         }
         if (cancel) return;
         if (!added.length) {
-          setError("This story has no clips.");
+          setError("Diese Geschichte hat keine Clips.");
           return;
         }
         firstKey.current = added[0].key;
@@ -704,7 +704,7 @@ export function UploadView({
         setCover(source.cover);
         setCoverKey(added[0].key);
       } catch {
-        if (!cancel) setError("Couldn't open this story.");
+        if (!cancel) setError("Diese Geschichte ließ sich nicht öffnen.");
       } finally {
         if (!cancel) setReading(false);
       }
@@ -742,10 +742,10 @@ export function UploadView({
         const durationMs = await probeDuration(file);
         added.push({ key: crypto.randomUUID(), file, durationMs });
       }
-      if (!added.length) setError("Choose a video from the camera or gallery.");
+      if (!added.length) setError("Wähle ein Video von der Kamera oder aus der Galerie.");
       else setDrafts((current) => [...current, ...added]);
     } catch {
-      setError("Couldn't read one of those clips.");
+      setError("Einer der Clips ließ sich nicht lesen.");
     } finally {
       setReading(false);
     }
@@ -768,7 +768,7 @@ export function UploadView({
     saveLock = true;
     savingRef.current = true;
     setSaving(true);
-    setSavingLabel("Saving…");
+    setSavingLabel("Wird gespeichert…");
     setError(null);
     const storyId = storyIdRef.current;
     let kept = false;
@@ -780,7 +780,7 @@ export function UploadView({
       }
       const next: Story = {
         id: storyId,
-        title: title.trim() || "Story from Oma",
+        title: title.trim() || "Geschichte von Oma",
         cover,
         durationMs: clips.reduce((sum, clip) => sum + clip.durationMs, 0),
         unwrapped: story?.unwrapped ?? false,
@@ -804,7 +804,7 @@ export function UploadView({
       window.setTimeout(() => onSaved(next), 1100);
     } catch (caught) {
       if (!kept && !story) await discardStoryFiles(storyId);
-      setError(caught instanceof Error ? caught.message : "Couldn't save that story.");
+      setError(caught instanceof Error ? caught.message : "Die Geschichte ließ sich nicht speichern.");
       savingRef.current = false;
       setSaving(false);
     } finally {
@@ -824,8 +824,8 @@ export function UploadView({
           <div className="check-pop">
             <Check className="size-14" strokeWidth={3} aria-hidden="true" />
           </div>
-          <h2 className="font-display text-4xl font-semibold">Saved</h2>
-          <p className="text-lg font-bold text-muted">{story?.unwrapped ? "It's on the shelf." : "It's on the shelf, wrapped up."}</p>
+          <h2 className="font-display text-4xl font-semibold">Gespeichert</h2>
+          <p className="text-lg font-bold text-muted">{story?.unwrapped ? "Sie liegt auf dem Regal." : "Sie liegt eingepackt auf dem Regal."}</p>
         </div>
       </div>
     );
@@ -840,18 +840,18 @@ export function UploadView({
       }}
     >
       <header className="flex items-center gap-2 px-4 pt-4 pb-2">
-        <button type="button" className="icon-btn tap" onClick={askLeave} aria-label="Back to shelf">
+        <button type="button" className="icon-btn tap" onClick={askLeave} aria-label="Zurück zum Regal">
           <ArrowLeft className="size-6" />
         </button>
-        <h1 className="font-display text-3xl font-semibold">{story ? "Edit story" : "New story"}</h1>
+        <h1 className="font-display text-3xl font-semibold">{story ? "Geschichte bearbeiten" : "Neue Geschichte"}</h1>
       </header>
       <div className="upload-scroll grid flex-1 content-start gap-3 overflow-y-auto px-5 pt-2 pb-4">
         <label className="grid gap-2 font-extrabold text-ink">
-          Title
+          Titel
           <input
             className="field"
             value={title}
-            placeholder="Story from Oma"
+            placeholder="Geschichte von Oma"
             onChange={(event) => setTitle(event.target.value)}
             maxLength={80}
             enterKeyHint="done"
@@ -860,11 +860,11 @@ export function UploadView({
         <div className="grid grid-cols-2 gap-3">
           <button type="button" className="choice tap" onClick={() => cameraRef.current?.click()}>
             <Camera className="size-7" aria-hidden="true" />
-            Camera
+            Kamera
           </button>
           <button type="button" className="choice tap" onClick={() => galleryRef.current?.click()}>
             <ImageIcon className="size-7" aria-hidden="true" />
-            Gallery
+            Galerie
           </button>
         </div>
         <input
@@ -885,7 +885,7 @@ export function UploadView({
         />
         {reading ? (
           <p className="flex items-center gap-2 font-bold text-muted">
-            <span className="busy-dot" /> Reading clips
+            <span className="busy-dot" /> Clips werden gelesen
           </p>
         ) : null}
         {error ? (
@@ -907,7 +907,7 @@ export function UploadView({
                 <button
                   type="button"
                   className="icon-btn tap"
-                  aria-label={`Move clip ${index + 1} up`}
+                  aria-label={`Clip ${index + 1} nach oben`}
                   disabled={index === 0}
                   onClick={() => move(index, -1)}
                 >
@@ -916,7 +916,7 @@ export function UploadView({
                 <button
                   type="button"
                   className="icon-btn tap"
-                  aria-label={`Move clip ${index + 1} down`}
+                  aria-label={`Clip ${index + 1} nach unten`}
                   disabled={index === drafts.length - 1}
                   onClick={() => move(index, 1)}
                 >
@@ -925,7 +925,7 @@ export function UploadView({
                 <button
                   type="button"
                   className="icon-btn tap"
-                  aria-label={`Remove clip ${index + 1}`}
+                  aria-label={`Clip ${index + 1} entfernen`}
                   onClick={() => setDrafts((current) => current.filter((item) => item.key !== clip.key))}
                 >
                   <Trash2 className="size-5" />
@@ -934,18 +934,18 @@ export function UploadView({
             ))}
           </ol>
         ) : reading ? null : (
-          <p className="text-lg font-bold text-muted">Add one or more clips. They play in the order you set.</p>
+          <p className="text-lg font-bold text-muted">Füge einen oder mehrere Clips hinzu. Sie spielen in der Reihenfolge, die du einstellst.</p>
         )}
-        {drafts.length > 1 ? <p className="font-bold text-muted">Together {formatLength(total)}</p> : null}
+        {drafts.length > 1 ? <p className="font-bold text-muted">Zusammen {formatLength(total)}</p> : null}
         {coverClip ? (
           <CoverPicker
             file={coverClip.file}
             durationMs={coverClip.durationMs}
-            clipName={`clip ${drafts.findIndex((clip) => clip.key === coverClip.key) + 1}`}
+            clipName={`Clip ${drafts.findIndex((clip) => clip.key === coverClip.key) + 1}`}
             selectedKey={coverClip.key}
             choices={drafts.map((clip, index) => ({ key: clip.key, label: `Clip ${index + 1}` }))}
             initialCover={keepInitial && coverClip.key === firstKey.current ? (story?.cover ?? null) : null}
-            title={title.trim() || "Story from Oma"}
+            title={title.trim() || "Geschichte von Oma"}
             lengthLabel={formatLength(total)}
             onChoose={setCoverClipKey}
             onCover={rememberCover}
@@ -959,7 +959,7 @@ export function UploadView({
           </p>
         ) : null}
         <button className="btn-primary tap" type="submit" disabled={!canSave}>
-          {saving ? savingLabel : story ? "Save changes" : "Save story"}
+          {saving ? savingLabel : story ? "Änderungen speichern" : "Geschichte speichern"}
         </button>
       </div>
       {confirmLeave ? (
@@ -972,14 +972,14 @@ export function UploadView({
             onClick={(event) => event.stopPropagation()}
           >
             <h2 id="leave-title" className="font-display text-3xl font-semibold">
-              Leave without saving?
+              Ohne Speichern verlassen?
             </h2>
-            <p className="text-lg font-bold text-muted">These clips stay where you picked them.</p>
+            <p className="text-lg font-bold text-muted">Die Clips bleiben dort, wo du sie ausgewählt hast.</p>
             <button type="button" className="btn-primary tap" onClick={() => setConfirmLeave(false)}>
-              Keep editing
+              Weiter bearbeiten
             </button>
             <button type="button" className="btn-quiet tap" onClick={onCancel}>
-              Leave
+              Verlassen
             </button>
           </div>
         </div>

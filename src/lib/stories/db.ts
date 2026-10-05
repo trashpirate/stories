@@ -30,11 +30,11 @@ function openDb(): Promise<IDBDatabase> {
     };
     request.onerror = () => {
       opening = null;
-      reject(request.error ?? new Error("Couldn't open the shelf."));
+      reject(request.error ?? new Error("Das Regal ließ sich nicht öffnen."));
     };
     request.onblocked = () => {
       opening = null;
-      reject(new Error("Couldn't open the shelf."));
+      reject(new Error("Das Regal ließ sich nicht öffnen."));
     };
   });
   return opening;
@@ -43,8 +43,8 @@ function openDb(): Promise<IDBDatabase> {
 function settle(tx: IDBTransaction): Promise<void> {
   return new Promise((resolve, reject) => {
     tx.oncomplete = () => resolve();
-    tx.onerror = () => reject(tx.error ?? new Error("Couldn't update the shelf."));
-    tx.onabort = () => reject(tx.error ?? new Error("Couldn't update the shelf."));
+    tx.onerror = () => reject(tx.error ?? new Error("Das Regal ließ sich nicht aktualisieren."));
+    tx.onabort = () => reject(tx.error ?? new Error("Das Regal ließ sich nicht aktualisieren."));
   });
 }
 
@@ -55,7 +55,7 @@ export async function listStories(): Promise<Story[]> {
   const finished = settle(tx);
   const rows = await new Promise<Story[]>((resolve, reject) => {
     request.onsuccess = () => resolve((request.result as Story[]) ?? []);
-    request.onerror = () => reject(request.error ?? new Error("Couldn't open the shelf."));
+    request.onerror = () => reject(request.error ?? new Error("Das Regal ließ sich nicht öffnen."));
   });
   await finished;
   return rows.sort((a, b) => b.createdAt - a.createdAt);
@@ -75,7 +75,7 @@ export async function markUnwrapped(id: string): Promise<Story | null> {
   const current = await new Promise<Story | undefined>((resolve, reject) => {
     const request = store.get(id);
     request.onsuccess = () => resolve(request.result as Story | undefined);
-    request.onerror = () => reject(request.error ?? new Error("Couldn't open that present."));
+    request.onerror = () => reject(request.error ?? new Error("Das Geschenk ließ sich nicht öffnen."));
   });
   if (!current || current.unwrapped) {
     await settle(tx);

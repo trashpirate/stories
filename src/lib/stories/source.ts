@@ -27,23 +27,23 @@ function extensionFor(file: File): string {
 
 async function rootDir(): Promise<FileSystemDirectoryHandle> {
   if (typeof navigator === "undefined" || !navigator.storage?.getDirectory) {
-    throw new Error("This phone can't store stories privately.");
+    throw new Error("Dieses Handy kann Geschichten nicht privat speichern.");
   }
   return navigator.storage.getDirectory();
 }
 
 function friendlyWriteError(error: unknown): Error {
   if (error instanceof DOMException && (error.name === "QuotaExceededError" || error.name === "NS_ERROR_DOM_QUOTA_REACHED")) {
-    return new Error("This phone is too full for that story.");
+    return new Error("Auf diesem Handy ist kein Platz mehr für die Geschichte.");
   }
   if (error instanceof Error && error.message) return error;
-  return new Error("Couldn't save that clip.");
+  return new Error("Der Clip ließ sich nicht speichern.");
 }
 
 async function fileFromPath(path: string): Promise<File> {
   const parts = path.split("/").filter(Boolean);
   if (parts.length < 2 || parts.some((part) => part === "." || part === "..")) {
-    throw new Error("That story couldn't be opened.");
+    throw new Error("Diese Geschichte ließ sich nicht öffnen.");
   }
   let dir = await rootDir();
   for (let i = 0; i < parts.length - 1; i++) {
@@ -84,7 +84,7 @@ export async function storeClip(storyId: string, index: number, file: File, dura
 
 function storyFolderName(storyId: string): string {
   if (!storyId || storyId.includes("/") || storyId.includes("\\") || storyId.includes("..")) {
-    throw new Error("Couldn't save that story.");
+    throw new Error("Die Geschichte ließ sich nicht speichern.");
   }
   return storyId;
 }
@@ -218,7 +218,7 @@ export async function getPlayableUrl(clip: ClipSource): Promise<string> {
     const { signStoryPaths } = await import("@/lib/stories/cloud.fn");
     const signed = await signStoryPaths({ data: { gets: [clip.path] } });
     const url = signed.gets[0]?.url;
-    if (!url) throw new Error("Couldn't open that clip.");
+    if (!url) throw new Error("Der Clip ließ sich nicht öffnen.");
     return url;
   }
 }
