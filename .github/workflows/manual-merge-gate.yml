@@ -1,0 +1,14 @@
+name: Manual merge gate
+
+# This does not run when a pull request opens. It reports the required
+# check "manual-approval" only after someone starts it from the Actions tab.
+on:
+  workflow_dispatch:
+
+jobs:
+  gate:
+    name: manual-approval
+    runs-on: ubuntu-latest
+    steps:
+      - name: Record the manual approval
+        run: echo "Manual merge gate passed for ${GITHUB_SHA}."
