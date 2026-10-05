@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState, type FormEvent } from "react";
 import { ArrowLeft, Maximize, Minimize, Pause, Pencil, Play, Plus, Trash2 } from "lucide-react";
 import { GiftCard, UnwrapOverlay } from "@/components/stories/Present";
 import { UploadView } from "@/components/stories/UploadView";
@@ -6,6 +6,7 @@ import { loadShelf, markUnwrapped, removeStory } from "@/lib/stories/db";
 import { formatClock, formatLength } from "@/lib/stories/format";
 import { useKidsMode, useMaxMinutes } from "@/lib/stories/kids";
 import { discardStoryFiles, getPlayableUrl, releasePlayableUrl, rememberStory } from "@/lib/stories/source";
+import { cloudStatus, openFamilyShelf, publishStory, reconcileCloud, unpublishStory } from "@/lib/stories/sync";
 import type { Story } from "@/lib/stories/types";
 
 type Mode =
@@ -66,6 +67,11 @@ function portraitScreen() {
 }
 
 export function StoriesApp() {
+  const [gate, setGate] = useState<"checking" | "locked" | "open">("checking");
+  const [passphrase, setPassphrase] = useState("");
+  const [gateError, setGateError] = useState<string | null>(null);
+  const [opening, setOpening] = useState(false);
+  const [phoneOnly, setPhoneOnly] = useState(false);
   const [kids, setKids] = useKidsMode();
   const [savedMaxMinutes, setMaxMinutes] = useMaxMinutes();
   const [stories, setStories] = useState<Story[] | null>(null);
@@ -92,8 +98,26 @@ export function StoriesApp() {
 
   useEffect(() => {
     let cancel = false;
+    cloudStatus()
+      .then((status) => {
+        if (cancel) return;
+        setPhoneOnly(!status.enabled);
+        setGate(status.enabled && !status.signedIn ? "locked" : "open");
+      })
+      .catch(() => {
+        if (!cancel) setGate("open");
+      });
+    return () => {
+      cancel = true;
+    };
+  }, []);
+
+  useEffect(() => {
+    if (gate !== "open") return;
+    let cancel = false;
     const load = () => {
       loadShelf()
+        .then((rows) => reconcileCloud(rows))
         .then((rows) => {
           if (cancel) return;
           setShelfError(null);
@@ -117,7 +141,7 @@ export function StoriesApp() {
       document.removeEventListener("visibilitychange", onVisible);
       window.removeEventListener("pageshow", load);
     };
-  }, []);
+  }, [gate]);
 
   useEffect(() => {
     if (pendingDelete) keepRef.current?.focus();
@@ -269,13 +293,13 @@ export function StoriesApp() {
     }
     if (ticket !== flightRef.current) return;
     if (!story.unwrapped) {
-      const opened = { ...story, unwrapped: true };
+      const opened = (await markUnwrapped(story.id)) ?? { ...story, unwrapped: true, updatedAt: Date.now() };
       playRef.current = { story: opened, index: 0, url };
       setStories((list) => list?.map((item) => (item.id === story.id ? opened : item)) ?? list);
       setMode({ type: "unwrap", story: opened });
       try {
-        await markUnwrapped(story.id);
         void rememberStory(opened);
+        void publishStory(opened);
       } catch {
         setStories((list) => list?.map((item) => (item.id === story.id ? story : item)) ?? list);
         setShelfError("Couldn't open that present.");
@@ -436,6 +460,7 @@ export function StoriesApp() {
     try {
       await discardStoryFiles(story.id);
       await removeStory(story.id);
+      await unpublishStory(story);
       setStories((list) => (list ?? []).filter((item) => item.id !== story.id));
     } catch {
       setShelfError("Couldn't remove that story.");
@@ -519,6 +544,58 @@ export function StoriesApp() {
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   }, [pendingDelete]);
+
+  async function submitPassphrase(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setOpening(true);
+    setGateError(null);
+    try {
+      const ok = await openFamilyShelf(passphrase);
+      if (!ok) {
+        setGateError("That passphrase does not open the shelf.");
+        setOpening(false);
+        return;
+      }
+      setPassphrase("");
+      setOpening(false);
+      setGate("open");
+    } catch {
+      setGateError("Couldn't open the private shelf.");
+      setOpening(false);
+    }
+  }
+
+  if (gate !== "open") {
+    return (
+      <main className="app-shell min-h-dvh bg-sky text-ink">
+        <form className="mx-auto grid min-h-dvh w-full max-w-lg content-center gap-4 px-5" onSubmit={(event) => void submitPassphrase(event)}>
+          <h1 className="font-display text-4xl font-semibold">Stories</h1>
+          <p className="text-lg font-bold text-muted">{gate === "checking" ? "Opening the shelf." : "This shelf is private."}</p>
+          {gate === "locked" ? (
+            <>
+              <input
+                type="password"
+                name="passphrase"
+                autoComplete="current-password"
+                className="min-h-14 rounded-3xl bg-card px-4 text-lg font-bold shadow-lift"
+                placeholder="Family passphrase"
+                value={passphrase}
+                onChange={(event) => setPassphrase(event.target.value)}
+              />
+              {gateError ? (
+                <p className="font-bold" role="alert">
+                  {gateError}
+                </p>
+              ) : null}
+              <button type="submit" className="btn-primary tap" disabled={opening || passphrase.length === 0}>
+                {opening ? "Opening" : "Open"}
+              </button>
+            </>
+          ) : null}
+        </form>
+      </main>
+    );
+  }
 
   return (
     <>
@@ -670,7 +747,10 @@ export function StoriesApp() {
         ) : mode.type === "shelf" ? (
           <>
             <header className="flex items-center justify-between gap-3 px-5 pt-5 pb-3">
-              <h1 className="font-display text-4xl font-semibold">Stories</h1>
+              <div>
+                <h1 className="font-display text-4xl font-semibold">Stories</h1>
+                {phoneOnly ? <p className="font-bold text-muted">On this phone only.</p> : null}
+              </div>
               <button
                 type="button"
                 role="switch"

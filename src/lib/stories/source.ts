@@ -103,6 +103,7 @@ export async function rememberStory(story: Story): Promise<void> {
     durationMs: story.durationMs,
     unwrapped: story.unwrapped,
     createdAt: story.createdAt,
+    updatedAt: story.updatedAt,
     clips: story.clips,
   };
   const cover = await folder.getFileHandle("cover.jpg", { create: true });
@@ -161,6 +162,7 @@ export async function recallStories(): Promise<Story[]> {
         durationMs: record.durationMs ?? 0,
         unwrapped: Boolean(record.unwrapped),
         createdAt: record.createdAt ?? 0,
+        updatedAt: record.updatedAt,
         clips: record.clips,
       });
     } catch {
@@ -207,10 +209,18 @@ export async function pruneStoryFiles(storyId: string, keepPaths: string[]): Pro
 }
 
 export async function getPlayableUrl(clip: ClipSource): Promise<string> {
-  const file = await fileFromPath(clip.path);
-  const type = file.type || mimeFromPath(clip.path);
-  const typed = file.type === type ? file : file.slice(0, file.size, type);
-  return URL.createObjectURL(typed);
+  try {
+    const file = await fileFromPath(clip.path);
+    const type = file.type || mimeFromPath(clip.path);
+    const typed = file.type === type ? file : file.slice(0, file.size, type);
+    return URL.createObjectURL(typed);
+  } catch {
+    const { signStoryPaths } = await import("@/lib/stories/cloud.fn");
+    const signed = await signStoryPaths({ data: { gets: [clip.path] } });
+    const url = signed.gets[0]?.url;
+    if (!url) throw new Error("Couldn't open that clip.");
+    return url;
+  }
 }
 
 export function releasePlayableUrl(url: string): void {

@@ -11,5 +11,17 @@ export type Story = {
   durationMs: number;
   unwrapped: boolean;
   createdAt: number;
+  updatedAt?: number;
+  clips: ClipSource[];
+};
+
+/** The private shelf record. No cover bytes, no public URL. */
+export type CloudStory = {
+  id: string;
+  title: string;
+  durationMs: number;
+  unwrapped: boolean;
+  createdAt: number;
+  updatedAt: number;
   clips: ClipSource[];
 };

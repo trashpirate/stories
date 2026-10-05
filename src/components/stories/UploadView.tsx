@@ -3,6 +3,7 @@ import { ArrowLeft, Camera, Check, ChevronDown, ChevronUp, Image as ImageIcon, T
 import { putStory } from "@/lib/stories/db";
 import { formatClock, formatLength } from "@/lib/stories/format";
 import { discardStoryFiles, pruneStoryFiles, readClipFile, rememberStory, requestPersistentStorage, storeClip } from "@/lib/stories/source";
+import { publishStory } from "@/lib/stories/sync";
 import type { Story } from "@/lib/stories/types";
 
 type DraftClip = {
@@ -709,11 +710,13 @@ export function UploadView({
         durationMs: clips.reduce((sum, clip) => sum + clip.durationMs, 0),
         unwrapped: story?.unwrapped ?? false,
         createdAt: story?.createdAt ?? Date.now(),
+        updatedAt: Date.now(),
         clips,
       };
       await rememberStory(next);
       kept = true;
       await putStory(next);
+      await publishStory(next);
       try {
         await pruneStoryFiles(storyId, clips.map((clip) => clip.path));
       } catch {
