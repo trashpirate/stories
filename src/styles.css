@@ -329,6 +329,10 @@
   overflow-anchor: none;
 }
 
+.upload-scroll {
+  overflow-anchor: none;
+}
+
 .gift-card {
   position: relative;
   aspect-ratio: 3 / 4;
@@ -562,6 +566,8 @@
 }
 .probe-video {
   position: fixed;
+  top: 0;
+  left: -120px;
   width: 2px;
   height: 2px;
   opacity: 0;

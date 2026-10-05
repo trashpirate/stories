@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { ArrowLeft, Camera, Check, ChevronDown, ChevronUp, Image as ImageIcon, Trash2 } from "lucide-react";
 import { putStory } from "@/lib/stories/db";
 import { formatClock, formatLength } from "@/lib/stories/format";
@@ -71,7 +72,38 @@ function waitFor(video: HTMLVideoElement, event: "loadedmetadata"): Promise<void
   });
 }
 
-function seekTo(video: HTMLVideoElement, time: number): Promise<void> {
+type ScrollLock = { node: HTMLElement; top: number } | null;
+
+function scrollersFrom(node: HTMLElement | null): HTMLElement[] {
+  const found: HTMLElement[] = [];
+  let current = node?.parentElement ?? null;
+  while (current) {
+    const style = getComputedStyle(current);
+    if (/(auto|scroll)/.test(style.overflowY)) found.push(current);
+    current = current.parentElement;
+  }
+  const root = document.scrollingElement;
+  if (root instanceof HTMLElement && !found.includes(root)) found.push(root);
+  return found;
+}
+
+function pinScroll(anchor: HTMLElement | null, lock: { current: ScrollLock }) {
+  const node = scrollersFrom(anchor)[0];
+  if (!node) return;
+  if (!lock.current) lock.current = { node, top: node.scrollTop };
+  const top = lock.current.top;
+  const restore = () => {
+    node.scrollTop = top;
+  };
+  restore();
+  requestAnimationFrame(restore);
+  window.setTimeout(restore, 0);
+  window.setTimeout(restore, 60);
+  window.setTimeout(restore, 180);
+  window.setTimeout(restore, 400);
+}
+
+function seekTo(video: HTMLVideoElement, time: number, hold?: () => void): Promise<void> {
   const duration = Number.isFinite(video.duration) ? video.duration : time;
   const target = Math.min(Math.max(time, 0), Math.max(0, duration - 0.001));
   if (Math.abs(video.currentTime - target) < 0.03 && video.readyState >= 2) return Promise.resolve();
@@ -82,6 +114,7 @@ function seekTo(video: HTMLVideoElement, time: number): Promise<void> {
     }, 1500);
     const onSeeked = () => {
       cleanup();
+      hold?.();
       resolve();
     };
     const onErr = () => {
@@ -95,7 +128,9 @@ function seekTo(video: HTMLVideoElement, time: number): Promise<void> {
     };
     video.addEventListener("seeked", onSeeked);
     video.addEventListener("error", onErr);
+    hold?.();
     video.currentTime = target;
+    hold?.();
   });
 }
 
@@ -199,6 +234,8 @@ function CoverPicker({
   const imgRef = useRef<HTMLImageElement>(null);
   const stageRef = useRef<HTMLDivElement>(null);
   const clipRowRef = useRef<HTMLDivElement>(null);
+  const scrollLock = useRef<ScrollLock>(null);
+  const scrollTicket = useRef(0);
   const onCoverRef = useRef(onCover);
   onCoverRef.current = onCover;
   const previewRef = useRef<string | null>(null);
@@ -312,7 +349,7 @@ function CoverPicker({
       if (cancel) return;
       const duration = Number.isFinite(video.duration) ? video.duration : durationMs / 1000;
       const suggest = suggestedTime(duration);
-      await seekTo(video, suggest);
+      await seekTo(video, suggest, () => pinScroll(stageRef.current, scrollLock));
       if (cancel) return;
       const cover = await captureFrame(video);
       if (cancel) return;
@@ -348,7 +385,7 @@ function CoverPicker({
     const video = videoRef.current;
     if (!video) return;
     try {
-      await seekTo(video, seconds);
+      await seekTo(video, seconds, () => pinScroll(stageRef.current, scrollLock));
       if (token !== scrubToken.current) return;
       const blob = await captureFrame(video);
       if (token !== scrubToken.current) return;
@@ -368,7 +405,25 @@ function CoverPicker({
     if (previous && previous !== url) URL.revokeObjectURL(previous);
   }
 
+  function holdPlace() {
+    pinScroll(stageRef.current, scrollLock);
+  }
+
+  function beginHold() {
+    scrollLock.current = null;
+    scrollTicket.current += 1;
+    holdPlace();
+  }
+
+  function releasePlace() {
+    const ticket = scrollTicket.current;
+    window.setTimeout(() => {
+      if (scrollTicket.current === ticket) scrollLock.current = null;
+    }, 1000);
+  }
+
   function onScrub(next: number) {
+    holdPlace();
     setUsingExisting(false);
     setTimeMs(next);
     const token = ++scrubToken.current;
@@ -382,9 +437,11 @@ function CoverPicker({
   function chooseClip(key: string) {
     const row = clipRowRef.current;
     const left = row?.scrollLeft ?? 0;
+    holdPlace();
     onChoose(key);
     const restore = () => {
       if (row) row.scrollLeft = left;
+      holdPlace();
     };
     restore();
     requestAnimationFrame(() => {
@@ -510,7 +567,12 @@ function CoverPicker({
                     ? "tap min-h-12 shrink-0 rounded-full bg-cobalt px-4 font-extrabold text-card"
                     : "tap min-h-12 shrink-0 rounded-full bg-card px-4 font-extrabold text-ink shadow-lift"
                 }
-                onMouseDown={(event) => event.preventDefault()}
+                onPointerDown={(event) => {
+                  beginHold();
+                  event.currentTarget.focus({ preventScroll: true });
+                }}
+                onPointerUp={releasePlace}
+                onPointerCancel={releasePlace}
                 onClick={() => chooseClip(choice.key)}
               >
                 {choice.label}
@@ -535,6 +597,9 @@ function CoverPicker({
           aria-label={`Seek ${clipName}`}
           style={{ ["--seek" as string]: `${max ? (Math.min(timeMs, max) / max) * 100 : 0}%` }}
           onChange={(event) => onScrub(Number(event.target.value))}
+          onPointerDown={beginHold}
+          onPointerUp={releasePlace}
+          onPointerCancel={releasePlace}
         />
       </label>
       <div
@@ -575,7 +640,9 @@ function CoverPicker({
         </div>
       </div>
       {error ? <p className="font-bold text-ink">{error}</p> : null}
-      <video ref={videoRef} className="probe-video" muted playsInline preload="auto" />
+      {typeof document === "undefined"
+        ? null
+        : createPortal(<video ref={videoRef} className="probe-video" muted playsInline preload="auto" />, document.body)}
     </section>
   );
 }
@@ -773,7 +840,7 @@ export function UploadView({
         </button>
         <h1 className="font-display text-3xl font-semibold">{story ? "Edit story" : "New story"}</h1>
       </header>
-      <div className="grid flex-1 content-start gap-3 overflow-y-auto px-5 pt-2 pb-4">
+      <div className="upload-scroll grid flex-1 content-start gap-3 overflow-y-auto px-5 pt-2 pb-4">
         <label className="grid gap-2 font-extrabold text-ink">
           Title
           <input
