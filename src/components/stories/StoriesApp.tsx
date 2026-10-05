@@ -1,16 +1,16 @@
 import { useCallback, useEffect, useRef, useState, type FormEvent } from "react";
-import { ArrowLeft, Maximize, Minimize, Pause, Pencil, Play, Plus, Trash2 } from "lucide-react";
+import { ArrowLeft, Gift, Maximize, Minimize, Pause, Pencil, Play, Plus, Trash2 } from "lucide-react";
 import { GiftCard, UnwrapOverlay } from "@/components/stories/Present";
 import { LangSwitch } from "@/components/stories/LangSwitch";
 import { UploadView } from "@/components/stories/UploadView";
 import { t, uiError, type UiError } from "@/lib/stories/copy";
-import { loadShelf, markUnwrapped, removeStory } from "@/lib/stories/db";
+import { loadShelf, markUnwrapped, putStory, removeStory } from "@/lib/stories/db";
 import { formatClock, formatLength } from "@/lib/stories/format";
 import { useLang } from "@/lib/stories/lang";
 import { useKidsMode, useMaxMinutes } from "@/lib/stories/kids";
 import { CODE, codeOf, report } from "@/lib/stories/log";
 import { discardStoryFiles, getPlayableUrl, releasePlayableUrl, rememberStory } from "@/lib/stories/source";
-import { cloudStatus, listCloudStories, loadCovers, mergeCloud, openFamilyShelf, publishUnwrapped, unpublishStory } from "@/lib/stories/sync";
+import { cloudStatus, listCloudStories, loadCovers, mergeCloud, openFamilyShelf, publishRecord, unpublishStory } from "@/lib/stories/sync";
 import type { Story } from "@/lib/stories/types";
 
 type Mode =
@@ -333,7 +333,7 @@ export function StoriesApp() {
         void markUnwrapped(story.id).catch((error) => report("could not mark story unwrapped", error));
         void rememberStory(opened).catch((error) => report("could not remember unwrapped story", error));
       } else {
-        void publishUnwrapped(opened).catch((error) => report("could not publish unwrapped story", error));
+        void publishRecord(opened).catch((error) => report("could not publish unwrapped story", error));
       }
       return;
     }
@@ -488,6 +488,23 @@ export function StoriesApp() {
       pressTimer.current = null;
       togglePause();
     }, 560);
+  }
+
+  async function wrapStory(story: Story) {
+    if (!story.unwrapped) return;
+    const wrapped = { ...story, unwrapped: false, updatedAt: Date.now() };
+    setStories((list) => list?.map((item) => (item.id === story.id ? wrapped : item)) ?? list);
+    try {
+      if (phoneOnly) {
+        await putStory(wrapped);
+        await rememberStory(wrapped);
+      } else {
+        await publishRecord(wrapped);
+      }
+    } catch (error) {
+      setStories((list) => list?.map((item) => (item.id === story.id ? story : item)) ?? list);
+      setShelfError(codeOf(error));
+    }
   }
 
   async function confirmDelete() {
@@ -899,6 +916,17 @@ export function StoriesApp() {
                         >
                           <Trash2 className="size-4" />
                         </button>
+                        {story.unwrapped ? (
+                          <button
+                            type="button"
+                            className="tap mt-2 flex min-h-11 w-full items-center justify-center gap-2 rounded-full bg-card font-extrabold text-cobalt shadow-lift"
+                            aria-label={text.wrapNamed(story.title)}
+                            onClick={() => void wrapStory(story)}
+                          >
+                            <Gift className="size-4" aria-hidden="true" />
+                            {text.wrap}
+                          </button>
+                        ) : null}
                       </>
                     ) : null}
                   </article>

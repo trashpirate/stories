@@ -38,6 +38,7 @@ type Copy = {
   deleteHint: string;
   keep: string;
   delete: string;
+  wrap: string;
   language: string;
   back: string;
   editStory: string;
@@ -70,6 +71,7 @@ type Copy = {
   minutes: (n: number) => string;
   editNamed: (title: string) => string;
   deleteNamed: (title: string) => string;
+  wrapNamed: (title: string) => string;
   moveUp: (n: number) => string;
   moveDown: (n: number) => string;
   removeClip: (n: number) => string;
@@ -103,7 +105,7 @@ const en: Copy = {
   scrub: "Move through the story",
   shelfClear: "The shelf is clear",
   nothingYet: "Nothing to watch yet.",
-  addPresent: "Add a story and it shows up here as a present.",
+  addPresent: "Add a story and it shows up here.",
   nothingTitle: "Nothing to watch yet",
   shorterHere: "Shorter stories will show up here.",
   stories: "Stories",
@@ -114,6 +116,7 @@ const en: Copy = {
   deleteHint: "It leaves the shelf.",
   keep: "Keep",
   delete: "Delete",
+  wrap: "Wrap",
   language: "Language",
   back: "Back to shelf",
   editStory: "Edit story",
@@ -146,6 +149,7 @@ const en: Copy = {
   minutes: (n) => `${n} minutes`,
   editNamed: (title) => `Edit ${title}`,
   deleteNamed: (title) => `Delete ${title}`,
+  wrapNamed: (title) => `Wrap ${title}`,
   moveUp: (n) => `Move clip ${n} up`,
   moveDown: (n) => `Move clip ${n} down`,
   removeClip: (n) => `Remove clip ${n}`,
@@ -191,7 +195,7 @@ const de: Copy = {
   scrub: "Durch die Geschichte springen",
   shelfClear: "Das Regal ist leer",
   nothingYet: "Noch nichts zum Anschauen.",
-  addPresent: "Füge eine Geschichte hinzu. Sie erscheint hier als Geschenk.",
+  addPresent: "Füge eine Geschichte hinzu. Sie erscheint hier.",
   nothingTitle: "Noch nichts zum Anschauen",
   shorterHere: "Kürzere Geschichten erscheinen hier.",
   stories: "Geschichten",
@@ -202,6 +206,7 @@ const de: Copy = {
   deleteHint: "Sie verschwindet vom Regal.",
   keep: "Behalten",
   delete: "Löschen",
+  wrap: "Einpacken",
   language: "Sprache",
   back: "Zurück zum Regal",
   editStory: "Geschichte bearbeiten",
@@ -234,6 +239,7 @@ const de: Copy = {
   minutes: (n) => `${n} Minuten`,
   editNamed: (title) => `${title} bearbeiten`,
   deleteNamed: (title) => `${title} löschen`,
+  wrapNamed: (title) => `${title} einpacken`,
   moveUp: (n) => `Clip ${n} nach oben`,
   moveDown: (n) => `Clip ${n} nach unten`,
   removeClip: (n) => `Clip ${n} entfernen`,
