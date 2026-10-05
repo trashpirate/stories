@@ -1,5 +1,6 @@
 import { cloudStatus, deleteCloudStory, readCloudLibrary, signStoryPaths, unlockFamily, writeCloudStory } from "@/lib/stories/cloud.fn";
-import { putStory } from "@/lib/stories/db";
+import { putStory, removeStory } from "@/lib/stories/db";
+import { collapseTakes } from "@/lib/stories/identity";
 import { coverKey } from "@/lib/stories/keys";
 import { readClipFile, rememberStory } from "@/lib/stories/source";
 import type { CloudStory, Story } from "@/lib/stories/types";
@@ -66,10 +67,24 @@ export async function unpublishStory(story: Story): Promise<void> {
   await deleteCloudStory({ data: { id: story.id } });
 }
 
+async function oneCopy(stories: Story[]): Promise<Story[]> {
+  const merged = collapseTakes(stories);
+  const keep = new Set(merged.map((story) => story.id));
+  for (const story of stories) {
+    if (keep.has(story.id)) continue;
+    try {
+      await removeStory(story.id);
+    } catch {
+      /* the extra card is already hidden */
+    }
+  }
+  return merged.sort((a, b) => b.createdAt - a.createdAt);
+}
+
 /** Pull the private shelf, keep the newer copy of each story, and upload ones that exist only here. */
 export async function reconcileCloud(local: Story[]): Promise<Story[]> {
   const status = await cloudStatus();
-  if (!status.enabled || !status.signedIn) return local;
+  if (!status.enabled || !status.signedIn) return oneCopy(local);
   const remote = await readCloudLibrary();
   const byId = new Map(local.map((story) => [story.id, story]));
   const remoteIds = new Set(remote.stories.map((story) => story.id));
@@ -99,7 +114,7 @@ export async function reconcileCloud(local: Story[]): Promise<Story[]> {
     }
   }
 
-  return [...byId.values()].sort((a, b) => b.createdAt - a.createdAt);
+  return oneCopy([...byId.values()]);
 }
 
 export async function openFamilyShelf(passphrase: string): Promise<boolean> {

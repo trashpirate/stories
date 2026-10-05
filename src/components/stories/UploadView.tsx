@@ -7,6 +7,8 @@ import { discardStoryFiles, pruneStoryFiles, readClipFile, rememberStory, reques
 import { publishStory } from "@/lib/stories/sync";
 import type { Story } from "@/lib/stories/types";
 
+let saveLock = false;
+
 type DraftClip = {
   key: string;
   file: File;
@@ -762,7 +764,8 @@ export function UploadView({
   }
 
   async function save() {
-    if (!canSave || !cover || savingRef.current) return;
+    if (!canSave || !cover || savingRef.current || saveLock) return;
+    saveLock = true;
     savingRef.current = true;
     setSaving(true);
     setSavingLabel("Saving…");
@@ -804,6 +807,8 @@ export function UploadView({
       setError(caught instanceof Error ? caught.message : "Couldn't save that story.");
       savingRef.current = false;
       setSaving(false);
+    } finally {
+      saveLock = false;
     }
   }
 
