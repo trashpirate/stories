@@ -1,13 +1,9 @@
 import { cloudStatus, deleteCloudStory, readCloudLibrary, signStoryPaths, unlockFamily, writeCloudStory } from "@/lib/stories/cloud.fn";
 import { putStory, removeStory } from "@/lib/stories/db";
-import { collapseTakes } from "@/lib/stories/identity";
+import { collapseTakes, stamp } from "@/lib/stories/identity";
 import { coverKey } from "@/lib/stories/keys";
 import { readClipFile, rememberStory } from "@/lib/stories/source";
 import type { CloudStory, Story } from "@/lib/stories/types";
-
-function stamp(story: { updatedAt?: number; createdAt: number }): number {
-  return story.updatedAt || story.createdAt || 0;
-}
 
 function toCloud(story: Story): CloudStory {
   return {
@@ -47,7 +43,7 @@ export async function publishStory(story: Story, onProgress?: (label: string) =>
   }
   const uploads = [...bodies.entries()];
   onProgress?.("Asking for a private upload…");
-  const signed = await signStoryPaths({ data: { puts: uploads.map(([path]) => path), origin: location.origin } });
+  const signed = await signStoryPaths({ data: { puts: uploads.map(([path]) => path) } });
   const urls = new Map(signed.puts.map((item) => [item.path, item.url]));
   let clip = 0;
   for (const [path, body] of uploads) {
@@ -78,7 +74,7 @@ async function oneCopy(stories: Story[]): Promise<Story[]> {
       /* the extra card is already hidden */
     }
   }
-  return merged.sort((a, b) => b.createdAt - a.createdAt);
+  return merged;
 }
 
 /** Pull the private shelf, keep the newer copy of each story, and upload ones that exist only here. */
@@ -92,7 +88,7 @@ export async function reconcileCloud(local: Story[]): Promise<Story[]> {
   for (const story of remote.stories) {
     const have = byId.get(story.id);
     if (have && stamp(have) >= stamp(story)) continue;
-    const signed = await signStoryPaths({ data: { gets: [coverKey(story.id)], origin: location.origin } });
+    const signed = await signStoryPaths({ data: { gets: [coverKey(story.id)] } });
     const url = signed.gets[0]?.url;
     if (!url) continue;
     const response = await fetch(url);
