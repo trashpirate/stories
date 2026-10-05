@@ -20,16 +20,18 @@ function subscribe(onStoreChange: () => void): () => void {
   };
 }
 
-const LIMIT_KEY = "stories-max-min";
+const LIMIT_KEY = "stories-max-min-v2";
 const LIMIT_EVENT = "stories-limit-change";
 
-function readLimit(): number {
+function readLimit(): number | null {
   try {
-    const raw = Number(localStorage.getItem(LIMIT_KEY));
-    if (!Number.isFinite(raw)) return 10;
-    return Math.min(180, Math.max(1, Math.round(raw)));
+    const raw = localStorage.getItem(LIMIT_KEY);
+    if (raw == null || raw === "") return null;
+    const minutes = Number(raw);
+    if (!Number.isFinite(minutes)) return null;
+    return Math.min(180, Math.max(1, Math.round(minutes)));
   } catch {
-    return 10;
+    return null;
   }
 }
 
@@ -42,8 +44,8 @@ function subscribeLimit(onStoreChange: () => void): () => void {
   };
 }
 
-export function useMaxMinutes(): [number, (next: number) => void] {
-  const minutes = useSyncExternalStore(subscribeLimit, readLimit, () => 10);
+export function useMaxMinutes(): [number | null, (next: number) => void] {
+  const minutes = useSyncExternalStore(subscribeLimit, readLimit, () => null);
   const setMinutes = (next: number) => {
     const stored = Math.min(180, Math.max(1, Math.round(next)));
     try {
