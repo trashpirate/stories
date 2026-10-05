@@ -10,7 +10,7 @@ import { useLang } from "@/lib/stories/lang";
 import { useKidsMode, useMaxMinutes } from "@/lib/stories/kids";
 import { CODE, codeOf, report } from "@/lib/stories/log";
 import { discardStoryFiles, getPlayableUrl, releasePlayableUrl, rememberStory } from "@/lib/stories/source";
-import { cloudStatus, openFamilyShelf, publishStory, reconcileCloud, unpublishStory } from "@/lib/stories/sync";
+import { cloudStatus, listCloudStories, loadCovers, mergeCloud, openFamilyShelf, publishUnwrapped, unpublishStory } from "@/lib/stories/sync";
 import type { Story } from "@/lib/stories/types";
 
 type Mode =
@@ -24,6 +24,7 @@ type Playhead = { story: Story; index: number; url: string };
 function CoverImage({ blob, alt }: { blob: Blob; alt: string }) {
   const [url, setUrl] = useState<string | null>(null);
   useEffect(() => {
+    if (!blob.size) return;
     const next = URL.createObjectURL(blob);
     setUrl(next);
     return () => URL.revokeObjectURL(next);
@@ -81,6 +82,8 @@ export function StoriesApp() {
   const [kids, setKids] = useKidsMode();
   const [savedMaxMinutes, setMaxMinutes] = useMaxMinutes();
   const [stories, setStories] = useState<Story[] | null>(null);
+  const storiesRef = useRef<Story[] | null>(null);
+  storiesRef.current = stories;
   const [shelfError, setShelfError] = useState<UiError | null>(null);
   const [mode, setMode] = useState<Mode>({ type: "shelf" });
   const [pendingDelete, setPendingDelete] = useState<Story | null>(null);
@@ -126,21 +129,37 @@ export function StoriesApp() {
 
   useEffect(() => {
     if (gate !== "open") return;
+    let ticket = 0;
     let cancel = false;
     const load = () => {
-      loadShelf()
-        .then((rows) => reconcileCloud(rows))
-        .then((rows) => {
-          if (cancel) return;
-          setShelfError(null);
-          setStories((current) => (rows.length === 0 && current && current.length > 0 ? current : rows));
-        })
-        .catch((error) => {
-          if (!cancel) {
-            setShelfError(codeOf(error));
-            setStories((current) => current ?? []);
+      const mine = ++ticket;
+      void (async () => {
+        try {
+          const remote = await listCloudStories();
+          if (cancel || mine !== ticket) return;
+          if (!remote) {
+            const rows = await loadShelf();
+            if (cancel || mine !== ticket) return;
+            setShelfError(null);
+            setStories(rows);
+            return;
           }
-        });
+          setShelfError(null);
+          setStories((current) => mergeCloud(remote, current));
+          const have = new Set((storiesRef.current ?? []).filter((story) => story.cover.size > 0).map((story) => story.id));
+          void loadCovers(
+            remote.filter((story) => !have.has(story.id)),
+            (id, cover) => {
+              if (cancel || mine !== ticket) return;
+              setStories((list) => list?.map((item) => (item.id === id ? { ...item, cover } : item)) ?? list);
+            },
+          ).catch((error) => report("cover downloads stopped", error));
+        } catch (error) {
+          if (cancel || mine !== ticket) return;
+          setShelfError(codeOf(error));
+          setStories((current) => current ?? []);
+        }
+      })();
     };
     load();
     const onVisible = () => {
@@ -306,12 +325,16 @@ export function StoriesApp() {
     }
     if (ticket !== flightRef.current) return;
     if (!story.unwrapped) {
-      const opened = (await markUnwrapped(story.id)) ?? { ...story, unwrapped: true, updatedAt: Date.now() };
+      const opened = { ...story, unwrapped: true, updatedAt: Date.now() };
       playRef.current = { story: opened, index: 0, url };
       setStories((list) => list?.map((item) => (item.id === story.id ? opened : item)) ?? list);
       setMode({ type: "unwrap", story: opened });
-      void rememberStory(opened).catch((error) => report("could not remember unwrapped story", error));
-      void publishStory(opened).catch((error) => report("could not publish unwrapped story", error));
+      if (phoneOnly) {
+        void markUnwrapped(story.id).catch((error) => report("could not mark story unwrapped", error));
+        void rememberStory(opened).catch((error) => report("could not remember unwrapped story", error));
+      } else {
+        void publishUnwrapped(opened).catch((error) => report("could not publish unwrapped story", error));
+      }
       return;
     }
     setMode({ type: "play", story });

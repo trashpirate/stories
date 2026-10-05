@@ -1,8 +1,7 @@
 import { cloudStatus, deleteCloudStory, readCloudLibrary, signStoryPaths, unlockFamily, writeCloudStory } from "@/lib/stories/cloud.fn";
-import { putStory } from "@/lib/stories/db";
 import { coverKey } from "@/lib/stories/keys";
-import { CODE, fail, isStoriesError, report } from "@/lib/stories/log";
-import { readClipFile, rememberStory } from "@/lib/stories/source";
+import { CODE, fail, report } from "@/lib/stories/log";
+import { readClipFile } from "@/lib/stories/source";
 import type { CloudStory, Story } from "@/lib/stories/types";
 
 export type SaveStep =
@@ -10,10 +9,6 @@ export type SaveStep =
   | { kind: "cover" }
   | { kind: "clip"; n: number; total: number }
   | { kind: "shelf" };
-
-function stamp(story: { updatedAt?: number; createdAt: number }): number {
-  return story.updatedAt || story.createdAt || 0;
-}
 
 function toCloud(story: Story): CloudStory {
   return {
@@ -88,44 +83,50 @@ export async function unpublishStory(story: Story): Promise<void> {
   await deleteCloudStory({ data: { id: story.id } });
 }
 
-function byNewest(stories: Story[]): Story[] {
+function byNewest<T extends { createdAt: number }>(stories: T[]): T[] {
   return [...stories].sort((a, b) => b.createdAt - a.createdAt);
 }
 
-/** Pull the private shelf, keep the newer copy of each story, and upload ones that exist only here. */
-export async function reconcileCloud(local: Story[]): Promise<Story[]> {
+/** The private shelf list, or null when this app is not signed in to the bucket. */
+export async function listCloudStories(): Promise<CloudStory[] | null> {
   const status = await cloudStatus();
-  if (!status.enabled || !status.signedIn) return byNewest(local);
+  if (!status.enabled || !status.signedIn) return null;
   const remote = await readCloudLibrary();
-  const byId = new Map(local.map((story) => [story.id, story]));
-  const remoteIds = new Set(remote.stories.map((story) => story.id));
+  return remote.stories;
+}
 
-  for (const story of remote.stories) {
-    const have = byId.get(story.id);
-    if (have && stamp(have) >= stamp(story)) continue;
-    const signed = await signStoryPaths({ data: { gets: [coverKey(story.id)] } });
-    const url = signed.gets[0]?.url;
-    if (!url) continue;
-    const response = await fetch(url);
-    if (!response.ok) continue;
-    const next: Story = { ...story, cover: await response.blob() };
-    await rememberStory(next);
-    await putStory(next);
-    byId.set(story.id, next);
-  }
+/** Keep covers that already arrived, and leave the rest empty until they download. */
+export function mergeCloud(remote: CloudStory[], previous: Story[] | null): Story[] {
+  const covers = new Map((previous ?? []).filter((story) => story.cover.size > 0).map((story) => [story.id, story.cover]));
+  return byNewest(remote).map((story) => ({ ...story, cover: covers.get(story.id) ?? new Blob() }));
+}
 
-  for (const story of byId.values()) {
-    const cloud = remote.stories.find((item) => item.id === story.id);
-    if (!remoteIds.has(story.id) || (cloud && stamp(story) > stamp(cloud))) {
+/** Download covers in parallel. Each one is reported as soon as it arrives. */
+export async function loadCovers(stories: CloudStory[], onCover: (id: string, cover: Blob) => void): Promise<void> {
+  if (!stories.length) return;
+  const signed = await signStoryPaths({ data: { gets: stories.map((story) => coverKey(story.id)) } });
+  await Promise.all(
+    signed.gets.map(async (item) => {
       try {
-        await publishStory(story);
+        const response = await fetch(item.url);
+        if (!response.ok) {
+          report(`cover download failed for ${item.path}`, { status: response.status });
+          return;
+        }
+        const id = item.path.split("/")[1];
+        if (id) onCover(id, await response.blob());
       } catch (error) {
-        if (!isStoriesError(error)) report(`cloud publish skipped for ${story.id}`, error);
+        report(`cover download failed for ${item.path}`, error);
       }
-    }
-  }
+    }),
+  );
+}
 
-  return byNewest([...byId.values()]);
+/** Mark a story opened in the private list. Does not upload the clips again. */
+export async function publishUnwrapped(story: Story): Promise<void> {
+  const status = await cloudStatus();
+  if (!status.enabled || !status.signedIn) return;
+  await writeCloudStory({ data: toCloud(story) });
 }
 
 export async function openFamilyShelf(passphrase: string): Promise<boolean> {
