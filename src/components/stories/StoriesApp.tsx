@@ -67,7 +67,7 @@ function portraitScreen() {
 
 export function StoriesApp() {
   const [kids, setKids] = useKidsMode();
-  const [maxMinutes, setMaxMinutes] = useMaxMinutes();
+  const [savedMaxMinutes, setMaxMinutes] = useMaxMinutes();
   const [stories, setStories] = useState<Story[] | null>(null);
   const [shelfError, setShelfError] = useState<string | null>(null);
   const [mode, setMode] = useState<Mode>({ type: "shelf" });
@@ -447,6 +447,9 @@ export function StoriesApp() {
   }, []);
 
   const watching = mode.type === "play" || mode.type === "unwrap";
+  const shelfStories = stories ?? [];
+  const longestMinutes = Math.max(1, ...shelfStories.map((story) => Math.ceil(storyLengthMs(story) / 60000)));
+  const maxMinutes = savedMaxMinutes ?? longestMinutes;
 
   useEffect(() => {
     const sync = () => {
@@ -693,7 +696,7 @@ export function StoriesApp() {
                     className="limit-slider"
                     type="range"
                     min={1}
-                    max={Math.max(30, maxMinutes, ...(stories ?? []).map((story) => Math.ceil(storyLengthMs(story) / 60000)))}
+                    max={Math.max(longestMinutes, maxMinutes)}
                     step={1}
                     value={maxMinutes}
                     aria-valuetext={`${maxMinutes} minutes`}
