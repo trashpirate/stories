@@ -6,7 +6,7 @@ import { t, uiError, type UiError } from "@/lib/stories/copy";
 import { putStory } from "@/lib/stories/db";
 import { formatClock, formatLength } from "@/lib/stories/format";
 import { useLang } from "@/lib/stories/lang";
-import { CODE, codeOf, report } from "@/lib/stories/log";
+import { CODE, codeOf, noted, report } from "@/lib/stories/log";
 import { discardStoryFiles, pruneStoryFiles, readClipFile, rememberStory, requestPersistentStorage, storeClip } from "@/lib/stories/source";
 import { publishStory, type SaveStep } from "@/lib/stories/sync";
 import type { Story } from "@/lib/stories/types";
@@ -36,8 +36,7 @@ function probeDuration(file: File): Promise<number> {
       video.removeAttribute("src");
       video.load();
       if (ms == null) {
-        report(`clip metadata missing for ${file.name || "unnamed file"}`, { type: file.type, size: file.size });
-        reject(new Error(CODE.read));
+        reject(noted(CODE.read, `clip metadata missing for ${file.name || "unnamed file"}`, { type: file.type, size: file.size }));
       } else resolve(ms);
     };
     video.onloadedmetadata = () => {
@@ -60,8 +59,7 @@ function waitFor(video: HTMLVideoElement, event: "loadedmetadata"): Promise<void
   return new Promise((resolve, reject) => {
     const timer = window.setTimeout(() => {
       cleanup();
-      report("cover metadata timed out");
-      reject(new Error(CODE.read));
+      reject(noted(CODE.read, "cover metadata timed out"));
     }, 8000);
     const onOk = () => {
       cleanup();
@@ -69,8 +67,7 @@ function waitFor(video: HTMLVideoElement, event: "loadedmetadata"): Promise<void
     };
     const onErr = () => {
       cleanup();
-      report("cover video failed to load");
-      reject(new Error(CODE.read));
+      reject(noted(CODE.read, "cover video failed to load"));
     };
     const cleanup = () => {
       window.clearTimeout(timer);
@@ -129,8 +126,7 @@ function seekTo(video: HTMLVideoElement, time: number, hold?: () => void): Promi
     };
     const onErr = () => {
       cleanup();
-      report("cover seek failed");
-      reject(new Error(CODE.read));
+      reject(noted(CODE.read, "cover seek failed"));
     };
     const cleanup = () => {
       window.clearTimeout(timer);
@@ -154,16 +150,14 @@ function captureFrame(video: HTMLVideoElement): Promise<Blob> {
   canvas.height = Math.max(1, Math.round(height * scale));
   const ctx = canvas.getContext("2d");
   if (!ctx) {
-    report("cover canvas unavailable");
-    return Promise.reject(new Error(CODE.read));
+    return Promise.reject(noted(CODE.read, "cover canvas unavailable"));
   }
   ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
   return new Promise((resolve, reject) => {
     canvas.toBlob((blob) => {
       if (blob) resolve(blob);
       else {
-        report("cover jpeg encode failed");
-        reject(new Error(CODE.read));
+        reject(noted(CODE.read, "cover jpeg encode failed"));
       }
     }, "image/jpeg", 0.86);
   });
@@ -213,23 +207,20 @@ function cropView(blob: Blob, view: CoverView, stageW: number, stageH: number): 
       canvas.height = 960;
       const ctx = canvas.getContext("2d");
       if (!ctx || sw < 1 || sh < 1) {
-        report("cover crop canvas unavailable");
-        reject(new Error(CODE.read));
+        reject(noted(CODE.read, "cover crop canvas unavailable"));
         return;
       }
       ctx.drawImage(image, sx, sy, sw, sh, 0, 0, canvas.width, canvas.height);
       canvas.toBlob((next) => {
         if (next) resolve(next);
         else {
-          report("cover crop jpeg encode failed");
-          reject(new Error(CODE.read));
+          reject(noted(CODE.read, "cover crop jpeg encode failed"));
         }
       }, "image/jpeg", 0.86);
     };
     image.onerror = () => {
       URL.revokeObjectURL(url);
-      report("cover image failed to load");
-      reject(new Error(CODE.read));
+      reject(noted(CODE.read, "cover image failed to load"));
     };
     image.src = url;
   });
@@ -677,6 +668,15 @@ function CoverPicker({
   );
 }
 
+function saveLabel(text: ReturnType<typeof t>, saving: boolean, step: SaveStep | null, editing: boolean): string {
+  if (!saving) return editing ? text.saveChanges : text.saveStory;
+  if (step?.kind === "cover") return text.savingCover;
+  if (step?.kind === "clip") return text.savingClip(step.n, step.total);
+  if (step?.kind === "shelf") return text.savingShelf;
+  if (step?.kind === "prepare") return text.savingPrepare;
+  return text.saving;
+}
+
 export function UploadView({
   story = null,
   onCancel,
@@ -990,19 +990,7 @@ export function UploadView({
           </p>
         ) : null}
         <button className="btn-primary tap" type="submit" disabled={!canSave}>
-          {saving
-            ? step?.kind === "cover"
-              ? text.savingCover
-              : step?.kind === "clip"
-                ? text.savingClip(step.n, step.total)
-                : step?.kind === "shelf"
-                  ? text.savingShelf
-                  : step?.kind === "prepare"
-                    ? text.savingPrepare
-                    : text.saving
-            : story
-              ? text.saveChanges
-              : text.saveStory}
+          {saveLabel(text, saving, step, story != null)}
         </button>
       </div>
       {confirmLeave ? (

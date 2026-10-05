@@ -1,5 +1,5 @@
 import type { ClipSource, Story } from "@/lib/stories/types";
-import { CODE, fail, isStoriesError, report } from "@/lib/stories/log";
+import { CODE, fail, isStoriesError, noted } from "@/lib/stories/log";
 
 /**
  * Where a clip lives. The shelf and the player only ask for a playable URL.
@@ -36,11 +36,9 @@ async function rootDir(): Promise<FileSystemDirectoryHandle> {
 function friendlyWriteError(error: unknown): Error {
   if (isStoriesError(error)) return error;
   if (error instanceof DOMException && (error.name === "QuotaExceededError" || error.name === "NS_ERROR_DOM_QUOTA_REACHED")) {
-    report("private file storage is full", error);
-    return new Error(CODE.full);
+    return noted(CODE.full, "private file storage is full", error);
   }
-  report("clip write failed", error);
-  return new Error(CODE.save);
+  return noted(CODE.save, "clip write failed", error);
 }
 
 async function fileFromPath(path: string): Promise<File> {

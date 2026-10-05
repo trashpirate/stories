@@ -14,10 +14,16 @@ export const CODE = {
 
 export type ErrorCode = (typeof CODE)[keyof typeof CODE];
 
-const CODES = new Set<string>(Object.values(CODE));
+function matchedCode(error: unknown): ErrorCode | null {
+  const raw = error instanceof Error ? error.message : typeof error === "string" ? error : "";
+  for (const code of Object.values(CODE)) {
+    if (raw.includes(code)) return code;
+  }
+  return null;
+}
 
 export function isStoriesError(error: unknown): error is Error {
-  return error instanceof Error && [...CODES].some((code) => error.message.includes(code));
+  return error instanceof Error && matchedCode(error) !== null;
 }
 
 function loggedShape(error: unknown): unknown {
@@ -34,15 +40,18 @@ export function report(detail: string, error?: unknown): void {
   else console.error(`[stories] ${detail}`, loggedShape(error));
 }
 
-export function fail(code: ErrorCode, detail: string, error?: unknown): never {
+export function noted(code: ErrorCode, detail: string, error?: unknown): Error {
   report(detail, error);
-  throw new Error(code);
+  return new Error(code);
+}
+
+export function fail(code: ErrorCode, detail: string, error?: unknown): never {
+  throw noted(code, detail, error);
 }
 
 /** Map a thrown error to a short code. Unknown errors are logged here in English. */
 export function codeOf(error: unknown): ErrorCode {
-  const raw = error instanceof Error ? error.message : typeof error === "string" ? error : "";
-  const found = (Object.values(CODE) as ErrorCode[]).find((code) => raw.includes(code));
+  const found = matchedCode(error);
   if (found) return found;
   report("unmapped error", error);
   return CODE.generic;

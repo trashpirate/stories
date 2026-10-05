@@ -1,5 +1,5 @@
 import { backupStories, recallStories, requestPersistentStorage } from "@/lib/stories/source";
-import { CODE, report } from "@/lib/stories/log";
+import { CODE, noted } from "@/lib/stories/log";
 import type { Story } from "@/lib/stories/types";
 
 const DB_NAME = "stories";
@@ -32,14 +32,12 @@ function openDb(): Promise<IDBDatabase> {
     request.onerror = () => {
       opening = null;
       opening = null;
-      report("indexedDB open failed", request.error);
-      reject(new Error(CODE.shelf));
+      reject(noted(CODE.shelf, "indexedDB open failed", request.error));
     };
     request.onblocked = () => {
       opening = null;
       opening = null;
-      report("indexedDB open blocked");
-      reject(new Error(CODE.shelf));
+      reject(noted(CODE.shelf, "indexedDB open blocked"));
     };
   });
   return opening;
@@ -48,14 +46,8 @@ function openDb(): Promise<IDBDatabase> {
 function settle(tx: IDBTransaction): Promise<void> {
   return new Promise((resolve, reject) => {
     tx.oncomplete = () => resolve();
-    tx.onerror = () => {
-      report("indexedDB transaction failed", tx.error);
-      reject(new Error(CODE.save));
-    };
-    tx.onabort = () => {
-      report("indexedDB transaction aborted", tx.error);
-      reject(new Error(CODE.save));
-    };
+    tx.onerror = () => reject(noted(CODE.save, "indexedDB transaction failed", tx.error));
+    tx.onabort = () => reject(noted(CODE.save, "indexedDB transaction aborted", tx.error));
   });
 }
 
@@ -66,10 +58,7 @@ export async function listStories(): Promise<Story[]> {
   const finished = settle(tx);
   const rows = await new Promise<Story[]>((resolve, reject) => {
     request.onsuccess = () => resolve((request.result as Story[]) ?? []);
-    request.onerror = () => {
-      report("indexedDB list failed", request.error);
-      reject(new Error(CODE.shelf));
-    };
+    request.onerror = () => reject(noted(CODE.shelf, "indexedDB list failed", request.error));
   });
   await finished;
   return rows.sort((a, b) => b.createdAt - a.createdAt);
@@ -89,10 +78,7 @@ export async function markUnwrapped(id: string): Promise<Story | null> {
   const current = await new Promise<Story | undefined>((resolve, reject) => {
     const request = store.get(id);
     request.onsuccess = () => resolve(request.result as Story | undefined);
-    request.onerror = () => {
-      report("indexedDB read of a story failed", request.error);
-      reject(new Error(CODE.open));
-    };
+    request.onerror = () => reject(noted(CODE.open, "indexedDB read of a story failed", request.error));
   });
   if (!current || current.unwrapped) {
     await settle(tx);

@@ -32,13 +32,9 @@ async function putSigned(path: string, url: string, body: Blob): Promise<void> {
   try {
     response = await fetch(url, { method: "PUT", body });
   } catch (error) {
-    report(`upload blocked for ${path}. Bucket CORS must allow PUT from this site.`, error);
-    throw new Error(CODE.save);
+    fail(CODE.save, `upload blocked for ${path}. Bucket CORS must allow PUT from this site.`, error);
   }
-  if (!response.ok) {
-    report(`upload refused for ${path}`, { status: response.status });
-    throw new Error(CODE.save);
-  }
+  if (!response.ok) fail(CODE.save, `upload refused for ${path}`, { status: response.status });
 }
 
 /** Upload any local files we still have, then write the private shelf record. */

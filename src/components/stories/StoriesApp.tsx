@@ -310,12 +310,8 @@ export function StoriesApp() {
       playRef.current = { story: opened, index: 0, url };
       setStories((list) => list?.map((item) => (item.id === story.id ? opened : item)) ?? list);
       setMode({ type: "unwrap", story: opened });
-      try {
-        void rememberStory(opened).catch((error) => report("could not remember unwrapped story", error));
-        void publishStory(opened).catch((error) => report("could not publish unwrapped story", error));
-      } catch (error) {
-        report("could not mark story unwrapped", error);
-      }
+      void rememberStory(opened).catch((error) => report("could not remember unwrapped story", error));
+      void publishStory(opened).catch((error) => report("could not publish unwrapped story", error));
       return;
     }
     setMode({ type: "play", story });

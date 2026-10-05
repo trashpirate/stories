@@ -10,7 +10,7 @@ import {
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 import { deleteCookie, getCookie, getRequestProtocol, setCookie } from "@tanstack/react-start/server";
 import { env } from "@/lib/env.server";
-import { CODE, fail, isStoriesError, report } from "@/lib/stories/log";
+import { CODE, fail, isStoriesError, report, type ErrorCode } from "@/lib/stories/log";
 import { isStoryId, isStoryObjectKey } from "@/lib/stories/keys";
 import type { CloudStory } from "@/lib/stories/types";
 
@@ -199,30 +199,33 @@ async function mutate(change: (stories: CloudStory[]) => CloudStory[]): Promise<
   fail(CODE.save, "library write lost three conflicts");
 }
 
-export async function listStories(): Promise<CloudStory[]> {
+async function guard<T>(code: ErrorCode, detail: string, run: () => Promise<T>): Promise<T> {
   try {
-    requireSession();
-    return (await readLibrary()).stories;
+    return await run();
   } catch (error) {
     if (isStoriesError(error)) throw error;
-    fail(CODE.shelf, "listStories failed", error);
+    fail(code, detail, error);
   }
 }
 
-export async function saveStory(input: CloudStory): Promise<{ ok: true }> {
-  try {
+export function listStories(): Promise<CloudStory[]> {
+  return guard(CODE.shelf, "listStories failed", async () => {
+    requireSession();
+    return (await readLibrary()).stories;
+  });
+}
+
+export function saveStory(input: CloudStory): Promise<{ ok: true }> {
+  return guard(CODE.save, `saveStory failed for ${input?.id ?? "unknown"}`, async () => {
     requireSession();
     const story = cleanStory(input);
     await mutate((stories) => [story, ...stories.filter((item) => item.id !== story.id)]);
     return { ok: true };
-  } catch (error) {
-    if (isStoriesError(error)) throw error;
-    fail(CODE.save, `saveStory failed for ${input?.id ?? "unknown"}`, error);
-  }
+  });
 }
 
-export async function removeStory(id: string): Promise<{ ok: true }> {
-  try {
+export function removeStory(id: string): Promise<{ ok: true }> {
+  return guard(CODE.remove, `delete failed for story ${id}`, async () => {
     requireSession();
     if (!isStoryId(id)) fail(CODE.remove, "delete rejected: id is not a uuid");
     const listed = await r2().send(new ListObjectsV2Command({ Bucket: bucket(), Prefix: `stories/${id}/` }));
@@ -237,17 +240,14 @@ export async function removeStory(id: string): Promise<{ ok: true }> {
     }
     await mutate((stories) => stories.filter((item) => item.id !== id));
     return { ok: true };
-  } catch (error) {
-    if (isStoriesError(error)) throw error;
-    fail(CODE.remove, `delete failed for story ${id}`, error);
-  }
+  });
 }
 
-export async function signPaths(
+export function signPaths(
   puts: string[],
   gets: string[],
 ): Promise<{ puts: { path: string; url: string }[]; gets: { path: string; url: string }[] }> {
-  try {
+  return guard(CODE.generic, `signing failed for ${puts.length} uploads and ${gets.length} reads`, async () => {
     requireSession();
     const signedPuts = await Promise.all(
       puts.map(async (path) => {
@@ -264,8 +264,5 @@ export async function signPaths(
       }),
     );
     return { puts: signedPuts, gets: signedGets };
-  } catch (error) {
-    if (isStoriesError(error)) throw error;
-    fail(CODE.generic, `signing failed for ${puts.length} uploads and ${gets.length} reads`, error);
-  }
+  });
 }
