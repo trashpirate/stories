@@ -524,7 +524,7 @@ function CoverPicker({
           <span className="tabular-nums text-muted">{usingExisting ? "Current cover" : formatClock(timeMs)}</span>
         </span>
         <input
-          className="scrub"
+          className="clip-seek"
           type="range"
           min={0}
           max={max}
@@ -532,6 +532,7 @@ function CoverPicker({
           value={Math.min(timeMs, max)}
           disabled={!ready}
           aria-label={`Seek ${clipName}`}
+          style={{ ["--seek" as string]: `${max ? (Math.min(timeMs, max) / max) * 100 : 0}%` }}
           onChange={(event) => onScrub(Number(event.target.value))}
         />
       </label>

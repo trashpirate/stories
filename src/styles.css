@@ -193,6 +193,59 @@
   background: var(--color-card);
   box-shadow: var(--shadow-lift);
 }
+.clip-seek {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 100%;
+  height: 2.75rem;
+  margin: 0;
+  background: transparent;
+  cursor: pointer;
+  touch-action: manipulation;
+}
+.clip-seek:focus-visible {
+  outline: 3px solid var(--color-cobalt);
+  outline-offset: 2px;
+  border-radius: 999px;
+}
+.clip-seek::-webkit-slider-runnable-track {
+  height: 0.55rem;
+  border-radius: 999px;
+  background: linear-gradient(
+    to right,
+    var(--color-cobalt) var(--seek, 0%),
+    color-mix(in srgb, var(--color-cobalt) 22%, white) var(--seek, 0%)
+  );
+}
+.clip-seek::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 1.75rem;
+  height: 1.75rem;
+  margin-top: -0.6rem;
+  border: 3px solid var(--color-card);
+  border-radius: 999px;
+  background: var(--color-cobalt);
+  box-shadow: 0 2px 8px rgb(22 58 154 / 28%);
+}
+.clip-seek::-moz-range-track {
+  height: 0.55rem;
+  border: 0;
+  border-radius: 999px;
+  background: linear-gradient(
+    to right,
+    var(--color-cobalt) var(--seek, 0%),
+    color-mix(in srgb, var(--color-cobalt) 22%, white) var(--seek, 0%)
+  );
+}
+.clip-seek::-moz-range-thumb {
+  width: 1.75rem;
+  height: 1.75rem;
+  border: 3px solid var(--color-card);
+  border-radius: 999px;
+  background: var(--color-cobalt);
+  box-shadow: 0 2px 8px rgb(22 58 154 / 28%);
+}
 .limit-slider {
   width: 100%;
   height: 2.75rem;
@@ -669,19 +722,23 @@
 .scrub::before {
   content: "";
   position: absolute;
+  top: 50%;
   left: 0;
   right: 0;
   height: 0.45rem;
   border-radius: 999px;
   background: color-mix(in srgb, var(--color-cobalt) 22%, white);
+  transform: translateY(-50%);
 }
 .scrub-fill {
   position: absolute;
+  top: 50%;
   left: 0;
   height: 0.45rem;
   border-radius: 999px;
   background: var(--color-cobalt);
   pointer-events: none;
+  transform: translateY(-50%);
 }
 .scrub-fill::after {
   content: "";
