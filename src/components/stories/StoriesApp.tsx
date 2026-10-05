@@ -122,10 +122,7 @@ export function StoriesApp() {
         .then((rows) => {
           if (cancel) return;
           setShelfError(null);
-          setStories((current) => {
-            const next = rows.length === 0 && current && current.length > 0 ? current : rows;
-            return collapseTakes(next);
-          });
+          setStories((current) => (rows.length === 0 && current && current.length > 0 ? collapseTakes(current) : rows));
         })
         .catch(() => {
           if (!cancel) {
@@ -479,6 +476,7 @@ export function StoriesApp() {
   const shelfStories = stories ?? [];
   const longestMinutes = Math.max(1, ...shelfStories.map((story) => Math.ceil(storyLengthMs(story) / 60000)));
   const maxMinutes = savedMaxMinutes ?? longestMinutes;
+  const visible = kids ? shelfStories.filter((story) => storyLengthMs(story) <= maxMinutes * 60000) : shelfStories;
 
   useEffect(() => {
     const sync = () => {
@@ -740,7 +738,7 @@ export function StoriesApp() {
             story={mode.story}
             onCancel={() => setMode({ type: "shelf" })}
             onSaved={(story) => {
-              setStories((list) => collapseTakes([story, ...(list ?? [])]).sort((a, b) => b.createdAt - a.createdAt));
+              setStories((list) => collapseTakes([story, ...(list ?? [])]));
               setMode({ type: "shelf" });
             }}
           />
@@ -806,14 +804,14 @@ export function StoriesApp() {
                   {kids ? "Nothing to watch yet." : "Add a story and it shows up here as a present."}
                 </p>
               </section>
-            ) : (kids ? stories.filter((story) => storyLengthMs(story) <= maxMinutes * 60000) : stories).length === 0 ? (
+            ) : visible.length === 0 ? (
               <section className="mx-5 rounded-card bg-card px-5 py-8 text-center shadow-lift">
                 <h2 className="font-display text-3xl font-semibold">Nothing to watch yet</h2>
                 <p className="mt-2 text-lg font-bold text-muted">Shorter stories will show up here.</p>
               </section>
             ) : (
               <div className="shelf-row" role="list" aria-label="Stories">
-                {(kids ? stories.filter((story) => storyLengthMs(story) <= maxMinutes * 60000) : stories).map((story) => (
+                {visible.map((story) => (
                   <article key={story.id} className="story-card" role="listitem">
                     <button
                       type="button"

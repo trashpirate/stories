@@ -1,17 +1,14 @@
 import { createHash, createHmac, timingSafeEqual } from "node:crypto";
 import {
   DeleteObjectsCommand,
-  GetBucketCorsCommand,
   GetObjectCommand,
   ListObjectsV2Command,
   NoSuchKey,
-  PutBucketCorsCommand,
   PutObjectCommand,
   S3Client,
-  type CORSRule,
 } from "@aws-sdk/client-s3";
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
-import { deleteCookie, getCookie, getRequestHeader, getRequestProtocol, setCookie } from "@tanstack/react-start/server";
+import { deleteCookie, getCookie, getRequestProtocol, setCookie } from "@tanstack/react-start/server";
 import { env } from "@/lib/env.server";
 import { isStoryId, isStoryObjectKey } from "@/lib/stories/keys";
 import { collapseTakes } from "@/lib/stories/identity";
@@ -99,7 +96,6 @@ export function unlock(passphrase: string): { ok: true } | { ok: false } {
   if (!configured()) return { ok: false };
   if (!sameSecret(passphrase, required("FAMILY_PASSPHRASE"))) return { ok: false };
   setCookie(COOKIE, seal(Date.now() + MONTH * 1000), cookieOptions());
-  void allowOrigin(getRequestHeader("origin"));
   return { ok: true };
 }
 
@@ -240,10 +236,8 @@ export async function removeStory(id: string): Promise<{ ok: true }> {
 export async function signPaths(
   puts: string[],
   gets: string[],
-  origin: string,
 ): Promise<{ puts: { path: string; url: string }[]; gets: { path: string; url: string }[] }> {
   requireSession();
-  await allowOrigin(origin || getRequestHeader("origin"));
   const signedPuts = await Promise.all(
     puts.map(async (path) => {
       assertKey(path);
@@ -259,51 +253,4 @@ export async function signPaths(
     }),
   );
   return { puts: signedPuts, gets: signedGets };
-}
-
-function browserOrigin(value: string | undefined): string | null {
-  if (!value) return null;
-  try {
-    const url = new URL(value);
-    if (url.origin !== value) return null;
-    if (url.protocol === "https:") return url.origin;
-    if (url.protocol === "http:" && (url.hostname === "localhost" || url.hostname === "127.0.0.1")) return url.origin;
-    return null;
-  } catch {
-    return null;
-  }
-}
-
-function originCovered(rule: CORSRule, origin: string): boolean {
-  const origins = rule.AllowedOrigins ?? [];
-  const methods = (rule.AllowedMethods ?? []).map((method) => method.toUpperCase());
-  const hostOk = origins.some((item) => {
-    if (item === "*") return true;
-    try {
-      return new URL(item).origin === origin;
-    } catch {
-      return item.replace(/\/$/, "") === origin;
-    }
-  });
-  return hostOk && (methods.includes("PUT") || methods.includes("*"));
-}
-
-async function allowOrigin(value: string | undefined): Promise<void> {
-  const origin = browserOrigin(value);
-  if (!origin) throw new Error("Couldn't store that story from this site.");
-  try {
-    const current = await r2().send(new GetBucketCorsCommand({ Bucket: bucket() }));
-    const rules = current.CORSRules ?? [];
-    if (rules.some((rule) => originCovered(rule, origin))) return;
-    rules.push({
-      AllowedOrigins: [origin],
-      AllowedMethods: ["GET", "PUT", "HEAD"],
-      AllowedHeaders: ["*"],
-      ExposeHeaders: ["ETag", "Content-Length", "Content-Range"],
-      MaxAgeSeconds: 3600,
-    });
-    await r2().send(new PutBucketCorsCommand({ Bucket: bucket(), CORSConfiguration: { CORSRules: rules } }));
-  } catch {
-    // A saved dashboard rule is enough. Do not block the upload when this token cannot edit CORS.
-  }
 }
