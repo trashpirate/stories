@@ -6,6 +6,7 @@ import { loadShelf, markUnwrapped, removeStory } from "@/lib/stories/db";
 import { formatClock, formatLength } from "@/lib/stories/format";
 import { useKidsMode, useMaxMinutes } from "@/lib/stories/kids";
 import { discardStoryFiles, getPlayableUrl, releasePlayableUrl, rememberStory } from "@/lib/stories/source";
+import { collapseTakes } from "@/lib/stories/identity";
 import { cloudStatus, openFamilyShelf, publishStory, reconcileCloud, unpublishStory } from "@/lib/stories/sync";
 import type { Story } from "@/lib/stories/types";
 
@@ -121,7 +122,10 @@ export function StoriesApp() {
         .then((rows) => {
           if (cancel) return;
           setShelfError(null);
-          setStories((current) => (rows.length === 0 && current && current.length > 0 ? current : rows));
+          setStories((current) => {
+            const next = rows.length === 0 && current && current.length > 0 ? current : rows;
+            return collapseTakes(next);
+          });
         })
         .catch(() => {
           if (!cancel) {
@@ -736,11 +740,7 @@ export function StoriesApp() {
             story={mode.story}
             onCancel={() => setMode({ type: "shelf" })}
             onSaved={(story) => {
-              setStories((list) => {
-                const items = list ?? [];
-                if (!items.some((item) => item.id === story.id)) return [story, ...items];
-                return items.map((item) => (item.id === story.id ? story : item));
-              });
+              setStories((list) => collapseTakes([story, ...(list ?? [])]).sort((a, b) => b.createdAt - a.createdAt));
               setMode({ type: "shelf" });
             }}
           />
