@@ -1,8 +1,15 @@
 import { cloudStatus, deleteCloudStory, readCloudLibrary, signStoryPaths, unlockFamily, writeCloudStory } from "@/lib/stories/cloud.fn";
 import { putStory } from "@/lib/stories/db";
 import { coverKey } from "@/lib/stories/keys";
+import { CODE, fail, isStoriesError, report } from "@/lib/stories/log";
 import { readClipFile, rememberStory } from "@/lib/stories/source";
 import type { CloudStory, Story } from "@/lib/stories/types";
+
+export type SaveStep =
+  | { kind: "prepare" }
+  | { kind: "cover" }
+  | { kind: "clip"; n: number; total: number }
+  | { kind: "shelf" };
 
 function stamp(story: { updatedAt?: number; createdAt: number }): number {
   return story.updatedAt || story.createdAt || 0;
@@ -20,20 +27,24 @@ function toCloud(story: Story): CloudStory {
   };
 }
 
-async function putSigned(url: string, body: Blob): Promise<void> {
+async function putSigned(path: string, url: string, body: Blob): Promise<void> {
   let response: Response;
   try {
     response = await fetch(url, { method: "PUT", body });
-  } catch {
-    throw new Error("Der private Speicher hat den Upload blockiert. Erlaube dieser Seite in den CORS-Einstellungen, Dateien zu senden (PUT).");
+  } catch (error) {
+    report(`upload blocked for ${path}. Bucket CORS must allow PUT from this site.`, error);
+    throw new Error(CODE.save);
   }
-  if (!response.ok) throw new Error("Der private Speicher hat die Datei abgelehnt.");
+  if (!response.ok) {
+    report(`upload refused for ${path}`, { status: response.status });
+    throw new Error(CODE.save);
+  }
 }
 
 /** Upload any local files we still have, then write the private shelf record. */
 const publishing = new Map<string, Promise<void>>();
 
-export async function publishStory(story: Story, onProgress?: (label: string) => void): Promise<void> {
+export async function publishStory(story: Story, onProgress?: (step: SaveStep) => void): Promise<void> {
   const current = publishing.get(story.id);
   if (current) {
     await current;
@@ -46,10 +57,10 @@ export async function publishStory(story: Story, onProgress?: (label: string) =>
   await run;
 }
 
-async function uploadStory(story: Story, onProgress?: (label: string) => void): Promise<void> {
+async function uploadStory(story: Story, onProgress?: (step: SaveStep) => void): Promise<void> {
   const status = await cloudStatus();
   if (!status.enabled) return;
-  if (!status.signedIn) throw new Error("Gib das Familienpasswort ein.");
+  if (!status.signedIn) fail(CODE.passphrase, "publish while signed out");
   const bodies = new Map<string, Blob>();
   bodies.set(coverKey(story.id), story.cover);
   for (const clip of story.clips) {
@@ -60,18 +71,18 @@ async function uploadStory(story: Story, onProgress?: (label: string) => void): 
     }
   }
   const uploads = [...bodies.entries()];
-  onProgress?.("Privater Upload wird vorbereitet…");
+  onProgress?.({ kind: "prepare" });
   const signed = await signStoryPaths({ data: { puts: uploads.map(([path]) => path) } });
   const urls = new Map(signed.puts.map((item) => [item.path, item.url]));
   let clip = 0;
   for (const [path, body] of uploads) {
     const url = urls.get(path);
-    if (!url) throw new Error("Die Geschichte ließ sich nicht privat speichern.");
+    if (!url) fail(CODE.save, `no signed upload url for ${path}`);
     clip += 1;
-    onProgress?.(clip === 1 ? "Titelbild wird gespeichert…" : `Clip ${clip - 1} von ${uploads.length - 1} wird gespeichert…`);
-    await putSigned(url, body);
+    onProgress?.(clip === 1 ? { kind: "cover" } : { kind: "clip", n: clip - 1, total: uploads.length - 1 });
+    await putSigned(path, url, body);
   }
-  onProgress?.("Das Regal wird gespeichert…");
+  onProgress?.({ kind: "shelf" });
   await writeCloudStory({ data: toCloud(story) });
 }
 
@@ -112,8 +123,8 @@ export async function reconcileCloud(local: Story[]): Promise<Story[]> {
     if (!remoteIds.has(story.id) || (cloud && stamp(story) > stamp(cloud))) {
       try {
         await publishStory(story);
-      } catch {
-        /* the phone copy remains until the next open */
+      } catch (error) {
+        if (!isStoriesError(error)) report(`cloud publish skipped for ${story.id}`, error);
       }
     }
   }

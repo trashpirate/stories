@@ -10,6 +10,7 @@ import {
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 import { deleteCookie, getCookie, getRequestProtocol, setCookie } from "@tanstack/react-start/server";
 import { env } from "@/lib/env.server";
+import { CODE, fail, isStoriesError, report } from "@/lib/stories/log";
 import { isStoryId, isStoryObjectKey } from "@/lib/stories/keys";
 import type { CloudStory } from "@/lib/stories/types";
 
@@ -23,7 +24,7 @@ function configured(): boolean {
 
 function required(key: string): string {
   const value = env(key);
-  if (!value) throw new Error("Der private Speicher ist noch nicht eingerichtet.");
+  if (!value) fail(CODE.setup, `missing server env ${key}`);
   return value;
 }
 
@@ -93,7 +94,10 @@ export function cloudStatus(): { enabled: boolean; signedIn: boolean } {
 
 export function unlock(passphrase: string): { ok: true } | { ok: false } {
   if (!configured()) return { ok: false };
-  if (!sameSecret(passphrase, required("FAMILY_PASSPHRASE"))) return { ok: false };
+  if (!sameSecret(passphrase, required("FAMILY_PASSPHRASE"))) {
+    report("family passphrase rejected");
+    return { ok: false };
+  }
   setCookie(COOKIE, seal(Date.now() + MONTH * 1000), cookieOptions());
   return { ok: true };
 }
@@ -104,12 +108,12 @@ export function lock(): { ok: true } {
 }
 
 function requireSession(): void {
-  if (!configured()) throw new Error("Der private Speicher ist noch nicht eingerichtet.");
-  if (!sessionValid(getCookie(COOKIE))) throw new Error("Gib das Familienpasswort ein.");
+  if (!configured()) fail(CODE.setup, "private storage is not configured");
+  if (!sessionValid(getCookie(COOKIE))) fail(CODE.passphrase, "family session missing or expired");
 }
 
 function assertKey(path: string): void {
-  if (!isStoryObjectKey(path)) throw new Error("Die Datei ließ sich nicht speichern.");
+  if (!isStoryObjectKey(path)) fail(CODE.generic, `rejected object key ${path}`);
 }
 
 async function readLibrary(): Promise<{ stories: CloudStory[]; etag?: string }> {
@@ -122,7 +126,7 @@ async function readLibrary(): Promise<{ stories: CloudStory[]; etag?: string }> 
     if (error instanceof NoSuchKey || (error as { name?: string }).name === "NoSuchKey") return { stories: [] };
     const status = (error as { $metadata?: { httpStatusCode?: number } }).$metadata?.httpStatusCode;
     if (status === 404) return { stories: [] };
-    throw new Error("Das private Regal ließ sich nicht öffnen.");
+    fail(CODE.shelf, "library read failed", error);
   }
 }
 
@@ -152,19 +156,19 @@ async function writeLibrary(stories: CloudStory[], etag?: string): Promise<void>
       );
       return;
     }
-    throw new Error("Das private Regal ließ sich nicht speichern.");
+    fail(CODE.save, "library write failed", error);
   }
 }
 
 function cleanStory(input: CloudStory): CloudStory {
-  if (!isStoryId(input.id)) throw new Error("Die Geschichte ließ sich nicht speichern.");
-  if (!input.title.trim() || input.title.length > 120) throw new Error("Die Geschichte ließ sich nicht speichern.");
+  if (!isStoryId(input.id)) fail(CODE.save, "story rejected: id is not a uuid");
+  if (!input.title.trim() || input.title.length > 120) fail(CODE.save, `story rejected: title length ${input.title.length}`);
   if (!Array.isArray(input.clips) || input.clips.length === 0 || input.clips.length > 40) {
-    throw new Error("Die Geschichte ließ sich nicht speichern.");
+    fail(CODE.save, `story rejected: clip count ${Array.isArray(input.clips) ? input.clips.length : "not-an-array"}`);
   }
   const clips = input.clips.map((clip) => {
     assertKey(clip.path);
-    if (!clip.path.startsWith(`stories/${input.id}/`)) throw new Error("Die Geschichte ließ sich nicht speichern.");
+    if (!clip.path.startsWith(`stories/${input.id}/`)) fail(CODE.save, `story rejected: clip path is outside ${input.id}`);
     return { path: clip.path, durationMs: Math.max(0, Math.round(clip.durationMs)) };
   });
   return {
@@ -186,61 +190,82 @@ async function mutate(change: (stories: CloudStory[]) => CloudStory[]): Promise<
       await writeLibrary(stories, current.etag);
       return;
     } catch (error) {
+      if (isStoriesError(error)) throw error;
       const status = (error as { $metadata?: { httpStatusCode?: number } }).$metadata?.httpStatusCode;
       if (status === 412 || status === 409) continue;
-      throw new Error("Das private Regal ließ sich nicht speichern.");
+      fail(CODE.save, "library write failed during update", error);
     }
   }
-  throw new Error("Das private Regal ließ sich nicht speichern.");
+  fail(CODE.save, "library write lost three conflicts");
 }
 
 export async function listStories(): Promise<CloudStory[]> {
-  requireSession();
-  return (await readLibrary()).stories;
+  try {
+    requireSession();
+    return (await readLibrary()).stories;
+  } catch (error) {
+    if (isStoriesError(error)) throw error;
+    fail(CODE.shelf, "listStories failed", error);
+  }
 }
 
 export async function saveStory(input: CloudStory): Promise<{ ok: true }> {
-  requireSession();
-  const story = cleanStory(input);
-  await mutate((stories) => [story, ...stories.filter((item) => item.id !== story.id)]);
-  return { ok: true };
+  try {
+    requireSession();
+    const story = cleanStory(input);
+    await mutate((stories) => [story, ...stories.filter((item) => item.id !== story.id)]);
+    return { ok: true };
+  } catch (error) {
+    if (isStoriesError(error)) throw error;
+    fail(CODE.save, `saveStory failed for ${input?.id ?? "unknown"}`, error);
+  }
 }
 
 export async function removeStory(id: string): Promise<{ ok: true }> {
-  requireSession();
-  if (!isStoryId(id)) throw new Error("Die Geschichte ließ sich nicht entfernen.");
-  const listed = await r2().send(new ListObjectsV2Command({ Bucket: bucket(), Prefix: `stories/${id}/` }));
-  const keys = (listed.Contents ?? []).map((item) => item.Key).filter((key): key is string => Boolean(key));
-  if (keys.length > 0) {
-    await r2().send(
-      new DeleteObjectsCommand({
-        Bucket: bucket(),
-        Delete: { Objects: keys.map((Key) => ({ Key })) },
-      }),
-    );
+  try {
+    requireSession();
+    if (!isStoryId(id)) fail(CODE.remove, "delete rejected: id is not a uuid");
+    const listed = await r2().send(new ListObjectsV2Command({ Bucket: bucket(), Prefix: `stories/${id}/` }));
+    const keys = (listed.Contents ?? []).map((item) => item.Key).filter((key): key is string => Boolean(key));
+    if (keys.length > 0) {
+      await r2().send(
+        new DeleteObjectsCommand({
+          Bucket: bucket(),
+          Delete: { Objects: keys.map((Key) => ({ Key })) },
+        }),
+      );
+    }
+    await mutate((stories) => stories.filter((item) => item.id !== id));
+    return { ok: true };
+  } catch (error) {
+    if (isStoriesError(error)) throw error;
+    fail(CODE.remove, `delete failed for story ${id}`, error);
   }
-  await mutate((stories) => stories.filter((item) => item.id !== id));
-  return { ok: true };
 }
 
 export async function signPaths(
   puts: string[],
   gets: string[],
 ): Promise<{ puts: { path: string; url: string }[]; gets: { path: string; url: string }[] }> {
-  requireSession();
-  const signedPuts = await Promise.all(
-    puts.map(async (path) => {
-      assertKey(path);
-      const url = await getSignedUrl(r2(), new PutObjectCommand({ Bucket: bucket(), Key: path }), { expiresIn: 60 * 15 });
-      return { path, url };
-    }),
-  );
-  const signedGets = await Promise.all(
-    gets.map(async (path) => {
-      assertKey(path);
-      const url = await getSignedUrl(r2(), new GetObjectCommand({ Bucket: bucket(), Key: path }), { expiresIn: 60 * 60 * 2 });
-      return { path, url };
-    }),
-  );
-  return { puts: signedPuts, gets: signedGets };
+  try {
+    requireSession();
+    const signedPuts = await Promise.all(
+      puts.map(async (path) => {
+        assertKey(path);
+        const url = await getSignedUrl(r2(), new PutObjectCommand({ Bucket: bucket(), Key: path }), { expiresIn: 60 * 15 });
+        return { path, url };
+      }),
+    );
+    const signedGets = await Promise.all(
+      gets.map(async (path) => {
+        assertKey(path);
+        const url = await getSignedUrl(r2(), new GetObjectCommand({ Bucket: bucket(), Key: path }), { expiresIn: 60 * 60 * 2 });
+        return { path, url };
+      }),
+    );
+    return { puts: signedPuts, gets: signedGets };
+  } catch (error) {
+    if (isStoriesError(error)) throw error;
+    fail(CODE.generic, `signing failed for ${puts.length} uploads and ${gets.length} reads`, error);
+  }
 }

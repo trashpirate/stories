@@ -1,3 +1,5 @@
+import { CODE, fail } from "@/lib/stories/log";
+
 const STORY_ID = "[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}";
 
 export function isStoryId(id: string): boolean {
@@ -10,6 +12,6 @@ export function isStoryObjectKey(path: string): boolean {
 }
 
 export function coverKey(storyId: string): string {
-  if (!isStoryId(storyId)) throw new Error("Die Geschichte ließ sich nicht speichern.");
+  if (!isStoryId(storyId)) fail(CODE.save, "cover key rejected: story id is not a uuid");
   return `stories/${storyId}/cover.jpg`;
 }

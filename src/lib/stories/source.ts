@@ -1,4 +1,5 @@
 import type { ClipSource, Story } from "@/lib/stories/types";
+import { CODE, fail, isStoriesError, report } from "@/lib/stories/log";
 
 /**
  * Where a clip lives. The shelf and the player only ask for a playable URL.
@@ -27,23 +28,25 @@ function extensionFor(file: File): string {
 
 async function rootDir(): Promise<FileSystemDirectoryHandle> {
   if (typeof navigator === "undefined" || !navigator.storage?.getDirectory) {
-    throw new Error("Dieses Handy kann Geschichten nicht privat speichern.");
+    fail(CODE.save, "this browser has no private file storage");
   }
   return navigator.storage.getDirectory();
 }
 
 function friendlyWriteError(error: unknown): Error {
+  if (isStoriesError(error)) return error;
   if (error instanceof DOMException && (error.name === "QuotaExceededError" || error.name === "NS_ERROR_DOM_QUOTA_REACHED")) {
-    return new Error("Auf diesem Handy ist kein Platz mehr für die Geschichte.");
+    report("private file storage is full", error);
+    return new Error(CODE.full);
   }
-  if (error instanceof Error && error.message) return error;
-  return new Error("Der Clip ließ sich nicht speichern.");
+  report("clip write failed", error);
+  return new Error(CODE.save);
 }
 
 async function fileFromPath(path: string): Promise<File> {
   const parts = path.split("/").filter(Boolean);
   if (parts.length < 2 || parts.some((part) => part === "." || part === "..")) {
-    throw new Error("Diese Geschichte ließ sich nicht öffnen.");
+    fail(CODE.open, `clip path rejected: ${path}`);
   }
   let dir = await rootDir();
   for (let i = 0; i < parts.length - 1; i++) {
@@ -84,7 +87,7 @@ export async function storeClip(storyId: string, index: number, file: File, dura
 
 function storyFolderName(storyId: string): string {
   if (!storyId || storyId.includes("/") || storyId.includes("\\") || storyId.includes("..")) {
-    throw new Error("Die Geschichte ließ sich nicht speichern.");
+    fail(CODE.save, "story id rejected");
   }
   return storyId;
 }
@@ -218,7 +221,7 @@ export async function getPlayableUrl(clip: ClipSource): Promise<string> {
     const { signStoryPaths } = await import("@/lib/stories/cloud.fn");
     const signed = await signStoryPaths({ data: { gets: [clip.path] } });
     const url = signed.gets[0]?.url;
-    if (!url) throw new Error("Der Clip ließ sich nicht öffnen.");
+    if (!url) fail(CODE.open, `no signed read url for ${clip.path}`);
     return url;
   }
 }
