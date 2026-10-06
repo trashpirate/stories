@@ -21,7 +21,7 @@ type Mode =
 
 type Playhead = { story: Story; index: number; url: string };
 
-function CoverImage({ blob, alt }: { blob: Blob; alt: string }) {
+function CoverImage({ blob, alt, tile = false }: { blob: Blob; alt: string; tile?: boolean }) {
   const [url, setUrl] = useState<string | null>(null);
   useEffect(() => {
     if (!blob.size) return;
@@ -29,8 +29,8 @@ function CoverImage({ blob, alt }: { blob: Blob; alt: string }) {
     setUrl(next);
     return () => URL.revokeObjectURL(next);
   }, [blob]);
-  if (!url) return <div className="aspect-3/4 bg-sky-deep" />;
-  return <img src={url} alt={alt} className="aspect-3/4 w-full object-cover" />;
+  if (!url) return <div className={tile ? "story-ph" : "aspect-3/4 bg-sky-deep"} />;
+  return <img src={url} alt={alt} className={tile ? "story-photo" : "aspect-3/4 w-full object-cover"} />;
 }
 
 function storyLengthMs(story: Story) {
@@ -805,134 +805,127 @@ export function StoriesApp() {
           />
         ) : mode.type === "shelf" ? (
           <>
-            <header className="flex flex-wrap items-center justify-between gap-3 px-5 pt-5 pb-3">
+            <header className="shelf-top">
               <div>
-                <h1 className="font-display text-4xl font-semibold">{text.app}</h1>
-                {phoneOnly ? <p className="font-bold text-muted">{text.phoneOnly}</p> : null}
+                <h1>{text.app}</h1>
+                {phoneOnly ? <p className="shelf-note">{text.phoneOnly}</p> : null}
               </div>
-              <div className="flex shrink-0 items-center gap-2">
-                {kids ? null : <LangSwitch />}
-                <button
-                  type="button"
-                  role="switch"
-                  aria-checked={kids}
-                  aria-label={text.kidsMode}
-                  className="tap flex min-h-12 items-center gap-2 rounded-full bg-card px-3 py-2 shadow-lift"
-                  onClick={() => setKids(!kids)}
-                >
-                  <span className="font-extrabold">{text.kids}</span>
-                  <span className={kids ? "switch-track on" : "switch-track"}>
-                    <span className="switch-knob" />
-                  </span>
-                </button>
-              </div>
+              <button
+                type="button"
+                role="switch"
+                aria-checked={kids}
+                aria-label={text.kidsMode}
+                className="kids-switch tap"
+                onClick={() => setKids(!kids)}
+              >
+                <span>{text.kids}</span>
+                <span className={kids ? "switch-track on" : "switch-track"}>
+                  <span className="switch-knob" />
+                </span>
+              </button>
             </header>
             {!kids ? (
-              <div className="grid gap-3 px-5 pb-4">
-                <label className="limit-card">
-                  <span className="flex items-baseline justify-between gap-3">
-                    <span className="font-extrabold">{text.kidsShelf}</span>
-                    <span className="font-extrabold text-cobalt">{text.upTo(maxMinutes)}</span>
-                  </span>
-                  <input
-                    className="limit-slider"
-                    type="range"
-                    min={1}
-                    max={Math.max(longestMinutes, maxMinutes)}
-                    step={1}
-                    value={maxMinutes}
-                    aria-valuetext={text.minutes(maxMinutes)}
-                    onChange={(event) => setMaxMinutes(Number(event.target.value))}
-                  />
-                  <span className="text-base font-bold text-muted">{text.kidsHint}</span>
-                </label>
+              <div className="shelf-tools">
+                <LangSwitch />
                 <button type="button" className="btn-primary tap" onClick={() => setMode({ type: "upload", story: null })}>
-                  <Plus className="size-6" aria-hidden="true" />
+                  <Plus className="size-5" aria-hidden="true" />
                   {text.newStory}
                 </button>
               </div>
             ) : null}
+            <section className="shelf-panel">
+            {!kids ? (
+              <label className="limit-card">
+                <span className="limit-line">
+                  <span>{text.kidsShelf}</span>
+                  <span>{text.upTo(maxMinutes)}</span>
+                </span>
+                <input
+                  className="limit-slider"
+                  type="range"
+                  min={1}
+                  max={Math.max(longestMinutes, maxMinutes)}
+                  step={1}
+                  value={maxMinutes}
+                  aria-valuetext={text.minutes(maxMinutes)}
+                  onChange={(event) => setMaxMinutes(Number(event.target.value))}
+                />
+                <span className="limit-hint">{text.kidsHint}</span>
+              </label>
+            ) : null}
             {shelfError ? (
-              <p className="mx-5 mb-3 rounded-3xl bg-card px-4 py-3 font-bold" role="alert">
+              <p className="shelf-alert" role="alert">
                 {uiError(lang, shelfError)}
               </p>
             ) : null}
             {stories === null ? (
-              <p className="flex items-center gap-2 px-5 font-bold text-muted">
+              <p className="shelf-wait">
                 <span className="busy-dot" /> {text.openingShelf}
               </p>
             ) : stories.length === 0 ? (
-              <section className="mx-5 rounded-card bg-card px-5 py-8 text-center shadow-lift">
-                <h2 className="font-display text-3xl font-semibold">{text.shelfClear}</h2>
-                <p className="mt-2 text-lg font-bold text-muted">
-                  {kids ? text.nothingYet : text.addPresent}
-                </p>
+              <section className="shelf-empty">
+                <h2>{text.shelfClear}</h2>
+                <p>{kids ? text.nothingYet : text.addPresent}</p>
               </section>
             ) : visible.length === 0 ? (
-              <section className="mx-5 rounded-card bg-card px-5 py-8 text-center shadow-lift">
-                <h2 className="font-display text-3xl font-semibold">{text.nothingTitle}</h2>
-                <p className="mt-2 text-lg font-bold text-muted">{text.shorterHere}</p>
+              <section className="shelf-empty">
+                <h2>{text.nothingTitle}</h2>
+                <p>{text.shorterHere}</p>
               </section>
             ) : (
-              <div className="shelf-row" role="list" aria-label={text.stories}>
+              <div className="shelf-list" role="list" aria-label={text.stories}>
                 {visible.map((story) => (
-                  <article key={story.id} className="story-card" role="listitem">
+                  <article key={story.id} className="story-row" role="listitem">
                     <button
                       type="button"
-                      className="tap relative block w-full overflow-hidden rounded-card bg-card text-left shadow-lift"
+                      className="story-open tap"
                       aria-label={story.unwrapped ? story.title : text.present}
                       onPointerDown={() => prime(story)}
                       onClick={() => void openStory(story)}
                     >
-                      {story.unwrapped ? (
-                        <>
-                          <CoverImage blob={story.cover} alt="" />
-                          <div className="card-caption">
-                            <h2>{story.title}</h2>
-                            {!kids ? <p>{formatLength(story.durationMs, lang)}</p> : null}
-                          </div>
-                        </>
-                      ) : (
-                        <GiftCard />
-                      )}
+                      <span className="story-thumb">
+                        {story.unwrapped ? <CoverImage blob={story.cover} alt="" tile /> : <GiftCard />}
+                      </span>
+                      <span className="story-copy">
+                        <h2>{story.unwrapped ? story.title : text.present}</h2>
+                        {!kids && story.unwrapped ? <p>{formatLength(story.durationMs, lang)}</p> : null}
+                      </span>
                     </button>
                     {!kids ? (
-                      <>
+                      <div className="story-actions">
                         <button
                           type="button"
-                          className="tap absolute top-2 left-2 grid size-11 place-items-center rounded-full bg-card text-cobalt shadow-lift"
+                          className="mini tap"
                           aria-label={story.unwrapped ? text.editNamed(story.title) : text.editPresent}
-                          onPointerDown={(event) => event.stopPropagation()}
                           onClick={() => setMode({ type: "upload", story })}
                         >
                           <Pencil className="size-4" />
                         </button>
-                        <button
-                          type="button"
-                          className="tap absolute top-2 right-2 grid size-11 place-items-center rounded-full bg-card text-cobalt shadow-lift"
-                          aria-label={story.unwrapped ? text.deleteNamed(story.title) : text.deletePresent}
-                          onPointerDown={(event) => event.stopPropagation()}
-                          onClick={() => setPendingDelete(story)}
-                        >
-                          <Trash2 className="size-4" />
-                        </button>
                         {story.unwrapped ? (
                           <button
                             type="button"
-                            className="tap absolute bottom-2 left-2 grid size-11 place-items-center rounded-full bg-card text-cobalt shadow-lift"
+                            className="mini tap"
                             aria-label={text.wrapNamed(story.title)}
-                            onPointerDown={(event) => event.stopPropagation()}
                             onClick={() => void wrapStory(story)}
                           >
                             <Gift className="size-4" aria-hidden="true" />
                           </button>
                         ) : null}
-                      </>
+                        <button
+                          type="button"
+                          className="mini tap"
+                          aria-label={story.unwrapped ? text.deleteNamed(story.title) : text.deletePresent}
+                          onClick={() => setPendingDelete(story)}
+                        >
+                          <Trash2 className="size-4" />
+                        </button>
+                      </div>
                     ) : null}
                   </article>
                 ))}
               </div>
             )}
+            </section>
           </>
         ) : null}
       </div>

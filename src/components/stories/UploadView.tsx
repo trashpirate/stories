@@ -892,7 +892,7 @@ export function UploadView({
         <button type="button" className="icon-btn tap" onClick={askLeave} aria-label={text.back}>
           <ArrowLeft className="size-6" />
         </button>
-        <h1 className="min-w-0 flex-1 font-display text-3xl font-semibold">{story ? text.editStory : text.newStory}</h1>
+        <h1 className="min-w-0 flex-1 text-xl font-extrabold">{story ? text.editStory : text.newStory}</h1>
         <LangSwitch />
       </header>
       <div className="upload-scroll grid flex-1 content-start gap-3 overflow-y-auto px-5 pt-2 pb-4">
