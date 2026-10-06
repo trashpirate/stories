@@ -623,20 +623,24 @@ export function StoriesApp() {
 
   if (gate !== "open") {
     return (
-      <main className="app-shell min-h-dvh bg-sky text-ink">
-        <form className="mx-auto grid min-h-dvh w-full max-w-lg content-center gap-4 px-5" onSubmit={(event) => void submitPassphrase(event)}>
-          <div className="flex justify-end">
-            <LangSwitch />
-          </div>
-          <h1 className="font-display text-4xl font-semibold">{text.app}</h1>
-          <p className="text-lg font-bold text-muted">{gate === "checking" ? text.openingShelf : text.privateShelf}</p>
-          {gate === "locked" ? (
+      <main className="gate app-shell">
+        <header className="gate-top">
+          <h1>{text.app}</h1>
+          <LangSwitch />
+        </header>
+        <form className="gate-body" onSubmit={(event) => void submitPassphrase(event)}>
+          {gate === "checking" ? (
+            <p className="gate-status">
+              <span className="busy-dot" /> {text.openingShelf}
+            </p>
+          ) : (
             <>
+              <p className="gate-note">{text.privateShelf}</p>
               <input
                 type="password"
                 name="passphrase"
                 autoComplete="current-password"
-                className="min-h-14 rounded-3xl bg-card px-4 text-lg font-bold shadow-lift"
+                className="field"
                 placeholder={text.passphrase}
                 value={passphrase}
                 onChange={(event) => setPassphrase(event.target.value)}
@@ -650,7 +654,7 @@ export function StoriesApp() {
                 {opening ? text.opening : text.open}
               </button>
             </>
-          ) : null}
+          )}
         </form>
       </main>
     );
@@ -873,26 +877,30 @@ export function StoriesApp() {
                 <p>{text.shorterHere}</p>
               </section>
             ) : (
-              <div className="shelf-list" role="list" aria-label={text.stories}>
+              <div className="shelf-grid" role="list" aria-label={text.stories}>
                 {visible.map((story) => (
-                  <article key={story.id} className="story-row" role="listitem">
+                  <article key={story.id} className="story-card" role="listitem">
                     <button
                       type="button"
-                      className="story-open tap"
+                      className="story-face tap"
                       aria-label={story.unwrapped ? story.title : text.present}
                       onPointerDown={() => prime(story)}
                       onClick={() => void openStory(story)}
                     >
-                      <span className="story-thumb">
-                        {story.unwrapped ? <CoverImage blob={story.cover} alt="" tile /> : <GiftCard />}
-                      </span>
-                      <span className="story-copy">
-                        <h2>{story.unwrapped ? story.title : text.present}</h2>
-                        {!kids && story.unwrapped ? <p>{formatLength(story.durationMs, lang)}</p> : null}
-                      </span>
+                      {story.unwrapped ? (
+                        <>
+                          <CoverImage blob={story.cover} alt="" />
+                          <span className="card-caption">
+                            <h2>{story.title}</h2>
+                            {!kids ? <p>{formatLength(story.durationMs, lang)}</p> : null}
+                          </span>
+                        </>
+                      ) : (
+                        <GiftCard />
+                      )}
                     </button>
                     {!kids ? (
-                      <div className="story-actions">
+                      <div className="card-tools">
                         <button
                           type="button"
                           className="mini tap"
@@ -910,7 +918,9 @@ export function StoriesApp() {
                           >
                             <Gift className="size-4" aria-hidden="true" />
                           </button>
-                        ) : null}
+                        ) : (
+                          <span />
+                        )}
                         <button
                           type="button"
                           className="mini tap"
