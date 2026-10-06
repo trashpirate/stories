@@ -811,7 +811,7 @@ export function StoriesApp() {
                 {phoneOnly ? <p className="font-bold text-muted">{text.phoneOnly}</p> : null}
               </div>
               <div className="flex shrink-0 items-center gap-2">
-                <LangSwitch />
+                {kids ? null : <LangSwitch />}
                 <button
                   type="button"
                   role="switch"
