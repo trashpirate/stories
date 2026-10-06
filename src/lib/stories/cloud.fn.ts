@@ -39,6 +39,15 @@ export const deleteCloudStory = createServerFn({ method: "POST" })
     return removeStory(data.id);
   });
 
+export const dropCloudClips = createServerFn({ method: "POST" })
+  .validator((data: { paths?: string[] }) => ({
+    paths: Array.isArray(data?.paths) ? data.paths.filter((item) => typeof item === "string") : [],
+  }))
+  .handler(async ({ data }) => {
+    const { dropClips } = await import("./cloud.server");
+    return dropClips(data.paths);
+  });
+
 export const signStoryPaths = createServerFn({ method: "POST" })
   .validator((data: { puts?: string[]; gets?: string[] }) => ({
     puts: Array.isArray(data?.puts) ? data.puts.filter((item) => typeof item === "string") : [],
