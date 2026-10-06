@@ -359,31 +359,72 @@
   position: relative;
   aspect-ratio: 3 / 4;
   overflow: hidden;
-  background: linear-gradient(
-    180deg,
-    color-mix(in srgb, var(--color-card) 16%, var(--color-cobalt)) 0%,
-    var(--color-cobalt) 32%,
-    var(--color-cobalt-deep) 100%
-  );
+  background:
+    radial-gradient(120% 70% at 12% 0%, rgb(255 255 255 / 24%), transparent 42%),
+    linear-gradient(
+      165deg,
+      color-mix(in srgb, var(--color-card) 22%, var(--color-cobalt)) 0%,
+      var(--color-cobalt) 38%,
+      var(--color-cobalt-deep) 100%
+    );
+}
+.gift-card::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(115deg, rgb(255 255 255 / 10%) 0 18%, transparent 18% 100%);
+  pointer-events: none;
 }
 .ribbon-v,
 .ribbon-h {
   position: absolute;
-  background: var(--color-ribbon);
   pointer-events: none;
+}
+.ribbon-v {
+  background: linear-gradient(
+    90deg,
+    color-mix(in srgb, #7a4e2c 70%, var(--color-ribbon)) 0%,
+    color-mix(in srgb, #c49a6c 55%, var(--color-ribbon)) 7%,
+    var(--color-ribbon) 22%,
+    color-mix(in srgb, white 78%, var(--color-ribbon)) 46%,
+    color-mix(in srgb, white 92%, var(--color-ribbon)) 52%,
+    var(--color-ribbon) 64%,
+    color-mix(in srgb, #a67a50 40%, var(--color-ribbon)) 86%,
+    color-mix(in srgb, #6b4324 65%, var(--color-ribbon)) 100%
+  );
+  box-shadow:
+    inset 1px 0 0 rgb(255 248 236 / 55%),
+    inset -1px 0 0 rgb(90 52 24 / 35%),
+    4px 0 8px rgb(12 28 68 / 18%),
+    -3px 0 7px rgb(12 28 68 / 12%);
+}
+.ribbon-h {
+  z-index: 1;
+  background: linear-gradient(
+    180deg,
+    color-mix(in srgb, white 70%, var(--color-ribbon)) 0%,
+    var(--color-ribbon) 18%,
+    color-mix(in srgb, white 88%, var(--color-ribbon)) 42%,
+    color-mix(in srgb, white 40%, var(--color-ribbon)) 58%,
+    color-mix(in srgb, #8a5a34 50%, var(--color-ribbon)) 100%
+  );
+  box-shadow:
+    inset 0 1px 0 rgb(255 248 236 / 70%),
+    inset 0 -1px 0 rgb(90 52 24 / 28%),
+    0 5px 8px rgb(12 28 68 / 22%);
 }
 .gift-card .ribbon-v {
   top: 0;
   bottom: 0;
   left: 50%;
-  width: 18%;
+  width: 15%;
   transform: translateX(-50%);
 }
 .gift-card .ribbon-h {
   left: 0;
   right: 0;
   top: 42%;
-  height: 13%;
+  height: 11%;
   transform: translateY(-50%);
 }
 
@@ -396,82 +437,121 @@
   height: 4.8rem;
   transform: translate(-50%, -58%);
   pointer-events: none;
+  filter: drop-shadow(0 6px 5px rgb(12 28 68 / 22%));
 }
 .gift-card .bow {
   width: 4.8rem;
   height: 2.8rem;
+  filter: drop-shadow(0 3px 3px rgb(12 28 68 / 24%));
 }
 .loop,
 .knot,
 .tail {
   position: absolute;
-  background: var(--color-ribbon);
 }
 .loop {
   top: 0.35rem;
   width: 3.15rem;
   height: 2.35rem;
-  border-radius: 50% 50% 46% 46%;
-  box-shadow: inset -0.45rem -0.35rem 0 color-mix(in srgb, var(--color-cobalt-deep) 22%, var(--color-ribbon));
+  border-radius: 50% 50% 45% 45%;
+  background: linear-gradient(
+    145deg,
+    color-mix(in srgb, white 82%, var(--color-ribbon)) 0%,
+    var(--color-ribbon) 38%,
+    color-mix(in srgb, #b88358 45%, var(--color-ribbon)) 72%,
+    color-mix(in srgb, #6e4526 55%, var(--color-ribbon)) 100%
+  );
+  box-shadow:
+    inset -0.35rem -0.28rem 0.4rem rgb(110 68 32 / 28%),
+    inset 0.15rem 0.12rem 0 rgb(255 248 236 / 45%);
 }
 .loop::after {
   content: "";
   position: absolute;
-  inset: 22% 32%;
+  inset: 20% 26% 16%;
   border-radius: 50%;
-  background: color-mix(in srgb, var(--color-card) 42%, var(--color-ribbon));
+  background: radial-gradient(circle at 40% 35%, color-mix(in srgb, white 16%, var(--color-cobalt)), var(--color-cobalt-deep) 70%);
+  box-shadow:
+    inset 0 0 0 1.5px color-mix(in srgb, white 45%, var(--color-ribbon)),
+    inset 0 3px 4px rgb(12 28 68 / 28%);
 }
 .loop-l {
   left: 0.15rem;
-  transform: rotate(-16deg);
+  transform: rotate(-18deg);
 }
 .loop-r {
   right: 0.15rem;
-  transform: rotate(16deg);
+  transform: rotate(18deg) scaleX(-1);
 }
 .knot {
   left: 50%;
-  top: 1.35rem;
+  top: 1.2rem;
   z-index: 1;
-  width: 1.15rem;
-  height: 1.15rem;
+  width: 1.05rem;
+  height: 0.85rem;
+  border-radius: 45%;
   transform: translateX(-50%);
-  border-radius: 50%;
-  background: color-mix(in srgb, var(--color-ribbon) 62%, var(--color-cobalt-deep));
+  background: linear-gradient(
+    160deg,
+    color-mix(in srgb, white 75%, var(--color-ribbon)),
+    color-mix(in srgb, #7a4e2c 35%, var(--color-ribbon))
+  );
+  box-shadow:
+    inset 0 1px 0 rgb(255 248 236 / 80%),
+    0 2px 2px rgb(12 28 68 / 25%);
+}
+.knot::after {
+  content: "";
+  position: absolute;
+  left: 18%;
+  right: 18%;
+  top: 38%;
+  height: 22%;
+  border-radius: 999px;
+  background: color-mix(in srgb, white 65%, var(--color-ribbon));
 }
 .tail {
-  top: 2.15rem;
+  top: 2.05rem;
   width: 0.95rem;
-  height: 1.85rem;
-  border-radius: 0 0 0.55rem 0.55rem;
+  height: 2rem;
+  background: linear-gradient(
+    90deg,
+    color-mix(in srgb, #7a4e2c 55%, var(--color-ribbon)) 0%,
+    var(--color-ribbon) 28%,
+    color-mix(in srgb, white 80%, var(--color-ribbon)) 52%,
+    var(--color-ribbon) 74%,
+    color-mix(in srgb, #6b4324 50%, var(--color-ribbon)) 100%
+  );
+  clip-path: polygon(0 0, 100% 0, 100% 74%, 50% 100%, 0 74%);
+  box-shadow: inset 1px 0 0 rgb(255 248 236 / 40%);
 }
 .tail-l {
-  left: 2.7rem;
-  transform: rotate(26deg);
+  left: 2.55rem;
+  transform: rotate(24deg);
 }
 .tail-r {
-  right: 2.7rem;
-  transform: rotate(-26deg);
+  right: 2.55rem;
+  transform: rotate(-24deg);
 }
 .gift-card .loop {
   width: 1.85rem;
   height: 1.4rem;
 }
 .gift-card .knot {
-  top: 0.75rem;
-  width: 0.7rem;
-  height: 0.7rem;
+  top: 0.7rem;
+  width: 0.62rem;
+  height: 0.5rem;
 }
 .gift-card .tail {
-  top: 1.2rem;
-  width: 0.58rem;
-  height: 1.05rem;
+  top: 1.15rem;
+  width: 0.55rem;
+  height: 1.15rem;
 }
 .gift-card .tail-l {
-  left: 1.5rem;
+  left: 1.45rem;
 }
 .gift-card .tail-r {
-  right: 1.5rem;
+  right: 1.45rem;
 }
 
 .unwrap-screen {
@@ -489,7 +569,9 @@
   top: 0;
   bottom: 0;
   width: 50%;
-  background: var(--color-cobalt);
+  background:
+    radial-gradient(80% 50% at 30% 0%, rgb(255 255 255 / 16%), transparent 55%),
+    var(--color-cobalt);
 }
 .unwrap-panel.left {
   left: 0;
@@ -504,7 +586,7 @@
 .unwrap-panel .ribbon-v {
   top: 0;
   bottom: 0;
-  width: 18%;
+  width: 16%;
 }
 .unwrap-panel.left .ribbon-v {
   right: 0;
@@ -516,7 +598,7 @@
   left: 0;
   right: 0;
   top: 46%;
-  height: 11%;
+  height: 9%;
   transform: translateY(-50%);
 }
 .unwrap-screen .bow {
