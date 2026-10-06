@@ -919,12 +919,12 @@ export function StoriesApp() {
                         {story.unwrapped ? (
                           <button
                             type="button"
-                            className="tap mt-2 flex min-h-11 w-full items-center justify-center gap-2 rounded-full bg-card font-extrabold text-cobalt shadow-lift"
+                            className="tap absolute bottom-2 left-2 grid size-11 place-items-center rounded-full bg-card text-cobalt shadow-lift"
                             aria-label={text.wrapNamed(story.title)}
+                            onPointerDown={(event) => event.stopPropagation()}
                             onClick={() => void wrapStory(story)}
                           >
                             <Gift className="size-4" aria-hidden="true" />
-                            {text.wrap}
                           </button>
                         ) : null}
                       </>
