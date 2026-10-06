@@ -807,7 +807,7 @@ export function StoriesApp() {
           <>
             <header className="shelf-head">
               <div>
-                <h1 className="font-display text-4xl font-semibold">{text.app}</h1>
+                <h1 className="font-display font-semibold">{text.app}</h1>
                 {phoneOnly ? <p className="font-bold text-muted">{text.phoneOnly}</p> : null}
               </div>
               <div className="shelf-tools">
@@ -847,7 +847,7 @@ export function StoriesApp() {
                   <span className="limit-hint">{text.kidsHint}</span>
                 </label>
                 <button type="button" className="btn-primary tap" onClick={() => setMode({ type: "upload", story: null })}>
-                  <Plus className="size-6" aria-hidden="true" />
+                  <Plus className="size-5" aria-hidden="true" />
                   {text.newStory}
                 </button>
               </div>
@@ -887,7 +887,7 @@ export function StoriesApp() {
                       {story.unwrapped ? (
                         <>
                           <CoverImage blob={story.cover} alt="" />
-                          <div className="card-caption">
+                          <div className={!kids && story.unwrapped ? "card-caption has-gift" : "card-caption"}>
                             <h2>{story.title}</h2>
                             {!kids ? <p>{formatLength(story.durationMs, lang)}</p> : null}
                           </div>
@@ -900,7 +900,7 @@ export function StoriesApp() {
                       <>
                         <button
                           type="button"
-                          className="tap absolute top-2 left-2 grid size-11 place-items-center rounded-full bg-card text-cobalt shadow-lift"
+                          className="card-tool edit tap"
                           aria-label={story.unwrapped ? text.editNamed(story.title) : text.editPresent}
                           onPointerDown={(event) => event.stopPropagation()}
                           onClick={() => setMode({ type: "upload", story })}
@@ -909,7 +909,7 @@ export function StoriesApp() {
                         </button>
                         <button
                           type="button"
-                          className="tap absolute top-2 right-2 grid size-11 place-items-center rounded-full bg-card text-cobalt shadow-lift"
+                          className="card-tool delete tap"
                           aria-label={story.unwrapped ? text.deleteNamed(story.title) : text.deletePresent}
                           onPointerDown={(event) => event.stopPropagation()}
                           onClick={() => setPendingDelete(story)}
@@ -919,7 +919,7 @@ export function StoriesApp() {
                         {story.unwrapped ? (
                           <button
                             type="button"
-                            className="tap absolute bottom-2 left-2 grid size-11 place-items-center rounded-full bg-card text-cobalt shadow-lift"
+                            className="card-tool gift tap"
                             aria-label={text.wrapNamed(story.title)}
                             onPointerDown={(event) => event.stopPropagation()}
                             onClick={() => void wrapStory(story)}
