@@ -111,7 +111,7 @@ The app lives in `trashpirate/stories`. Follow these rules for every change.
 
 - Always push changes to the `staging` branch. Do not push feature work to `main`.
 - Do not merge until the user explicitly asks to merge.
-- To merge, always create a pull request from `staging` into `main`, then run the manual merge gate. Never merge `main` directly.
+- To merge, always create a pull request from `staging` into `main`. Never merge `main` directly.
 - Before creating that pull request, review the change and apply the cleanup before opening it:
   - Can it be simplified?
   - Can the code be cleaner?
