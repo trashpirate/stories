@@ -873,26 +873,30 @@ export function StoriesApp() {
                 <p>{text.shorterHere}</p>
               </section>
             ) : (
-              <div className="shelf-list" role="list" aria-label={text.stories}>
+              <div className="shelf-grid" role="list" aria-label={text.stories}>
                 {visible.map((story) => (
-                  <article key={story.id} className="story-row" role="listitem">
+                  <article key={story.id} className="story-card" role="listitem">
                     <button
                       type="button"
-                      className="story-open tap"
+                      className="story-face tap"
                       aria-label={story.unwrapped ? story.title : text.present}
                       onPointerDown={() => prime(story)}
                       onClick={() => void openStory(story)}
                     >
-                      <span className="story-thumb">
-                        {story.unwrapped ? <CoverImage blob={story.cover} alt="" tile /> : <GiftCard />}
-                      </span>
-                      <span className="story-copy">
-                        <h2>{story.unwrapped ? story.title : text.present}</h2>
-                        {!kids && story.unwrapped ? <p>{formatLength(story.durationMs, lang)}</p> : null}
-                      </span>
+                      {story.unwrapped ? (
+                        <>
+                          <CoverImage blob={story.cover} alt="" />
+                          <span className="card-caption">
+                            <h2>{story.title}</h2>
+                            {!kids ? <p>{formatLength(story.durationMs, lang)}</p> : null}
+                          </span>
+                        </>
+                      ) : (
+                        <GiftCard />
+                      )}
                     </button>
                     {!kids ? (
-                      <div className="story-actions">
+                      <div className="card-tools">
                         <button
                           type="button"
                           className="mini tap"
@@ -910,7 +914,9 @@ export function StoriesApp() {
                           >
                             <Gift className="size-4" aria-hidden="true" />
                           </button>
-                        ) : null}
+                        ) : (
+                          <span />
+                        )}
                         <button
                           type="button"
                           className="mini tap"
