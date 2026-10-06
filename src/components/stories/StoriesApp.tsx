@@ -623,20 +623,24 @@ export function StoriesApp() {
 
   if (gate !== "open") {
     return (
-      <main className="app-shell min-h-dvh bg-sky text-ink">
-        <form className="mx-auto grid min-h-dvh w-full max-w-lg content-center gap-4 px-5" onSubmit={(event) => void submitPassphrase(event)}>
-          <div className="flex justify-end">
-            <LangSwitch />
-          </div>
-          <h1 className="font-display text-4xl font-semibold">{text.app}</h1>
-          <p className="text-lg font-bold text-muted">{gate === "checking" ? text.openingShelf : text.privateShelf}</p>
-          {gate === "locked" ? (
+      <main className="gate app-shell">
+        <header className="gate-top">
+          <h1>{text.app}</h1>
+          <LangSwitch />
+        </header>
+        <form className="gate-body" onSubmit={(event) => void submitPassphrase(event)}>
+          {gate === "checking" ? (
+            <p className="gate-status">
+              <span className="busy-dot" /> {text.openingShelf}
+            </p>
+          ) : (
             <>
+              <p className="gate-note">{text.privateShelf}</p>
               <input
                 type="password"
                 name="passphrase"
                 autoComplete="current-password"
-                className="min-h-14 rounded-3xl bg-card px-4 text-lg font-bold shadow-lift"
+                className="field"
                 placeholder={text.passphrase}
                 value={passphrase}
                 onChange={(event) => setPassphrase(event.target.value)}
@@ -650,7 +654,7 @@ export function StoriesApp() {
                 {opening ? text.opening : text.open}
               </button>
             </>
-          ) : null}
+          )}
         </form>
       </main>
     );
