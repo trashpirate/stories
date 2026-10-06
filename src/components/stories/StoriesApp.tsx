@@ -805,22 +805,22 @@ export function StoriesApp() {
           />
         ) : mode.type === "shelf" ? (
           <>
-            <header className="shelf-head">
+            <header className="flex flex-wrap items-center justify-between gap-3 px-5 pt-5 pb-3">
               <div>
-                <h1 className="font-display font-semibold">{text.app}</h1>
+                <h1 className="font-display text-4xl font-semibold">{text.app}</h1>
                 {phoneOnly ? <p className="font-bold text-muted">{text.phoneOnly}</p> : null}
               </div>
-              <div className="shelf-tools">
+              <div className="flex shrink-0 items-center gap-2">
                 {kids ? null : <LangSwitch />}
                 <button
                   type="button"
                   role="switch"
                   aria-checked={kids}
                   aria-label={text.kidsMode}
-                  className="kids-switch tap"
+                  className="tap flex min-h-12 items-center gap-2 rounded-full bg-card px-3 py-2 shadow-lift"
                   onClick={() => setKids(!kids)}
                 >
-                  <span>{text.kids}</span>
+                  <span className="font-extrabold">{text.kids}</span>
                   <span className={kids ? "switch-track on" : "switch-track"}>
                     <span className="switch-knob" />
                   </span>
@@ -828,7 +828,7 @@ export function StoriesApp() {
               </div>
             </header>
             {!kids ? (
-              <div className="grid gap-2 px-5 pb-3">
+              <div className="grid gap-3 px-5 pb-4">
                 <label className="limit-card">
                   <span className="flex items-baseline justify-between gap-3">
                     <span className="font-extrabold">{text.kidsShelf}</span>
@@ -844,10 +844,10 @@ export function StoriesApp() {
                     aria-valuetext={text.minutes(maxMinutes)}
                     onChange={(event) => setMaxMinutes(Number(event.target.value))}
                   />
-                  <span className="limit-hint">{text.kidsHint}</span>
+                  <span className="text-base font-bold text-muted">{text.kidsHint}</span>
                 </label>
                 <button type="button" className="btn-primary tap" onClick={() => setMode({ type: "upload", story: null })}>
-                  <Plus className="size-5" aria-hidden="true" />
+                  <Plus className="size-6" aria-hidden="true" />
                   {text.newStory}
                 </button>
               </div>
@@ -897,36 +897,37 @@ export function StoriesApp() {
                       )}
                     </button>
                     {!kids ? (
-                      <div className="card-actions">
+                      <>
                         <button
                           type="button"
-                          className="card-tool tap"
+                          className="tap absolute top-2 left-2 grid size-11 place-items-center rounded-full bg-card text-cobalt shadow-lift"
                           aria-label={story.unwrapped ? text.editNamed(story.title) : text.editPresent}
+                          onPointerDown={(event) => event.stopPropagation()}
                           onClick={() => setMode({ type: "upload", story })}
                         >
                           <Pencil className="size-4" />
                         </button>
-                        {story.unwrapped ? (
-                          <button
-                            type="button"
-                            className="card-tool tap"
-                            aria-label={text.wrapNamed(story.title)}
-                            onClick={() => void wrapStory(story)}
-                          >
-                            <Gift className="size-4" aria-hidden="true" />
-                          </button>
-                        ) : (
-                          <span className="card-tool spacer" aria-hidden="true" />
-                        )}
                         <button
                           type="button"
-                          className="card-tool tap"
+                          className="tap absolute top-2 right-2 grid size-11 place-items-center rounded-full bg-card text-cobalt shadow-lift"
                           aria-label={story.unwrapped ? text.deleteNamed(story.title) : text.deletePresent}
+                          onPointerDown={(event) => event.stopPropagation()}
                           onClick={() => setPendingDelete(story)}
                         >
                           <Trash2 className="size-4" />
                         </button>
-                      </div>
+                        {story.unwrapped ? (
+                          <button
+                            type="button"
+                            className="tap absolute bottom-2 left-2 grid size-11 place-items-center rounded-full bg-card text-cobalt shadow-lift"
+                            aria-label={text.wrapNamed(story.title)}
+                            onPointerDown={(event) => event.stopPropagation()}
+                            onClick={() => void wrapStory(story)}
+                          >
+                            <Gift className="size-4" aria-hidden="true" />
+                          </button>
+                        ) : null}
+                      </>
                     ) : null}
                   </article>
                 ))}
