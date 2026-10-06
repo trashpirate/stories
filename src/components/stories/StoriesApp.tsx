@@ -805,22 +805,22 @@ export function StoriesApp() {
           />
         ) : mode.type === "shelf" ? (
           <>
-            <header className="flex flex-wrap items-center justify-between gap-3 px-5 pt-5 pb-3">
+            <header className="shelf-head">
               <div>
                 <h1 className="font-display text-4xl font-semibold">{text.app}</h1>
                 {phoneOnly ? <p className="font-bold text-muted">{text.phoneOnly}</p> : null}
               </div>
-              <div className="flex shrink-0 items-center gap-2">
+              <div className="shelf-tools">
                 {kids ? null : <LangSwitch />}
                 <button
                   type="button"
                   role="switch"
                   aria-checked={kids}
                   aria-label={text.kidsMode}
-                  className="tap flex min-h-12 items-center gap-2 rounded-full bg-card px-3 py-2 shadow-lift"
+                  className="kids-switch tap"
                   onClick={() => setKids(!kids)}
                 >
-                  <span className="font-extrabold">{text.kids}</span>
+                  <span>{text.kids}</span>
                   <span className={kids ? "switch-track on" : "switch-track"}>
                     <span className="switch-knob" />
                   </span>
@@ -828,7 +828,7 @@ export function StoriesApp() {
               </div>
             </header>
             {!kids ? (
-              <div className="grid gap-3 px-5 pb-4">
+              <div className="grid gap-2 px-5 pb-3">
                 <label className="limit-card">
                   <span className="flex items-baseline justify-between gap-3">
                     <span className="font-extrabold">{text.kidsShelf}</span>
@@ -844,7 +844,7 @@ export function StoriesApp() {
                     aria-valuetext={text.minutes(maxMinutes)}
                     onChange={(event) => setMaxMinutes(Number(event.target.value))}
                   />
-                  <span className="text-base font-bold text-muted">{text.kidsHint}</span>
+                  <span className="limit-hint">{text.kidsHint}</span>
                 </label>
                 <button type="button" className="btn-primary tap" onClick={() => setMode({ type: "upload", story: null })}>
                   <Plus className="size-6" aria-hidden="true" />
