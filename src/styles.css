@@ -355,93 +355,12 @@
   overflow-anchor: none;
 }
 
-.gift-card {
-  position: relative;
+.gift-photo {
+  display: block;
+  width: 100%;
   aspect-ratio: 3 / 4;
-  overflow: hidden;
-  background: linear-gradient(
-    180deg,
-    color-mix(in srgb, var(--color-card) 16%, var(--color-cobalt)) 0%,
-    var(--color-cobalt) 32%,
-    var(--color-cobalt-deep) 100%
-  );
-}
-.ribbon-v,
-.ribbon-h {
-  position: absolute;
-  pointer-events: none;
-}
-.ribbon-v {
-  background: linear-gradient(
-    90deg,
-    color-mix(in srgb, var(--color-cobalt-deep) 22%, var(--color-ribbon)) 0%,
-    var(--color-ribbon) 20%,
-    color-mix(in srgb, white 72%, var(--color-ribbon)) 48%,
-    var(--color-ribbon) 74%,
-    color-mix(in srgb, var(--color-cobalt-deep) 26%, var(--color-ribbon)) 100%
-  );
-  box-shadow:
-    3px 0 7px rgb(22 58 154 / 16%),
-    -3px 0 7px rgb(22 58 154 / 12%);
-}
-.ribbon-h {
-  z-index: 1;
-  background: linear-gradient(
-    180deg,
-    color-mix(in srgb, white 55%, var(--color-ribbon)) 0%,
-    var(--color-ribbon) 36%,
-    color-mix(in srgb, white 70%, var(--color-ribbon)) 52%,
-    var(--color-ribbon) 70%,
-    color-mix(in srgb, var(--color-cobalt-deep) 20%, var(--color-ribbon)) 100%
-  );
-  box-shadow: 0 4px 7px rgb(22 58 154 / 18%);
-}
-.gift-card .ribbon-v {
-  top: 0;
-  bottom: 0;
-  left: 50%;
-  width: 18%;
-  transform: translateX(-50%);
-}
-.gift-card .ribbon-h {
-  left: 0;
-  right: 0;
-  top: 42%;
-  height: 13%;
-  transform: translateY(-50%);
-}
-
-.bow {
-  position: absolute;
-  left: 50%;
-  top: 40%;
-  z-index: 2;
-  width: 92%;
-  height: auto;
-  overflow: visible;
-  transform: translate(-50%, -52%);
-  pointer-events: none;
-  filter: drop-shadow(0 4px 3px rgb(22 58 154 / 18%));
-}
-.bow .band,
-.bow .lite {
-  fill: none;
-  stroke-linecap: round;
-  stroke-linejoin: round;
-}
-.bow .band {
-  stroke: var(--color-ribbon);
-  stroke-width: 16;
-}
-.bow .lite {
-  stroke: color-mix(in srgb, white 72%, var(--color-ribbon));
-  stroke-width: 5;
-}
-.bow .tail {
-  fill: var(--color-ribbon);
-}
-.bow .knot {
-  fill: color-mix(in srgb, white 28%, var(--color-ribbon));
+  object-fit: cover;
+  object-position: center;
 }
 
 .unwrap-screen {
@@ -459,40 +378,22 @@
   top: 0;
   bottom: 0;
   width: 50%;
-  background: var(--color-cobalt);
+  background-color: var(--color-cobalt);
+  background-image: url("/gift.jpg");
+  background-repeat: no-repeat;
+  background-size: 100vw 100%;
 }
 .unwrap-panel.left {
   left: 0;
+  background-position: left center;
   animation: away-left 0.78s cubic-bezier(0.2, 0.7, 0.2, 1) forwards;
   animation-delay: 0.28s;
 }
 .unwrap-panel.right {
   right: 0;
+  background-position: right center;
   animation: away-right 0.78s cubic-bezier(0.2, 0.7, 0.2, 1) forwards;
   animation-delay: 0.28s;
-}
-.unwrap-panel .ribbon-v {
-  top: 0;
-  bottom: 0;
-  width: 18%;
-}
-.unwrap-panel.left .ribbon-v {
-  right: 0;
-}
-.unwrap-panel.right .ribbon-v {
-  left: 0;
-}
-.unwrap-panel .ribbon-h {
-  left: 0;
-  right: 0;
-  top: 46%;
-  height: 11%;
-  transform: translateY(-50%);
-}
-.unwrap-screen .bow {
-  width: min(22rem, 84vw);
-  animation: bow-away 0.45s ease forwards;
-  animation-delay: 0.12s;
 }
 
 @keyframes away-left {
@@ -503,12 +404,6 @@
 @keyframes away-right {
   to {
     transform: translateX(108%) rotate(3deg);
-  }
-}
-@keyframes bow-away {
-  to {
-    opacity: 0;
-    transform: translate(-50%, -140%) scale(0.7);
   }
 }
 @keyframes unveil {
