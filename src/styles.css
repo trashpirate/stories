@@ -211,14 +211,14 @@
 .shelf-head {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
-  align-items: start;
-  gap: 0.6rem;
-  padding: 1rem 1.25rem 0.65rem;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.85rem 1.25rem 0.5rem;
 }
 .shelf-head h1 {
   margin: 0;
-  font-size: 1.75rem;
-  line-height: 1.15;
+  font-size: 1.65rem;
+  line-height: 1.1;
 }
 .shelf-tools {
   display: flex;
@@ -350,14 +350,9 @@
   right: 0;
   bottom: 0;
   left: 0;
-  padding: 1.35rem 0.65rem 0.5rem;
+  padding: 1.35rem 0.65rem 0.55rem;
   background: linear-gradient(to top, rgb(22 58 154 / 82%) 0%, rgb(22 58 154 / 18%) 70%, transparent 100%);
   color: var(--color-card);
-}
-.card-caption.has-gift {
-  padding-right: 0.65rem;
-  padding-bottom: 0.45rem;
-  padding-left: 2.95rem;
 }
 .card-caption h2 {
   margin: 0;
@@ -376,9 +371,15 @@
   font-size: 0.85rem;
   font-weight: 800;
 }
+.card-actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.35rem;
+  margin-top: 0.4rem;
+  padding: 0 0.15rem;
+}
 .card-tool {
-  position: absolute;
-  z-index: 2;
   display: grid;
   place-items: center;
   width: 2.25rem;
@@ -389,17 +390,9 @@
   color: var(--color-cobalt);
   box-shadow: var(--shadow-lift);
 }
-.card-tool.edit {
-  top: 0.45rem;
-  left: 0.45rem;
-}
-.card-tool.delete {
-  top: 0.45rem;
-  right: 0.45rem;
-}
-.card-tool.gift {
-  bottom: 0.45rem;
-  left: 0.45rem;
+.card-tool.spacer {
+  visibility: hidden;
+  box-shadow: none;
 }
 
 .cover-stage {

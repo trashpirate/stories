@@ -887,7 +887,7 @@ export function StoriesApp() {
                       {story.unwrapped ? (
                         <>
                           <CoverImage blob={story.cover} alt="" />
-                          <div className={!kids && story.unwrapped ? "card-caption has-gift" : "card-caption"}>
+                          <div className="card-caption">
                             <h2>{story.title}</h2>
                             {!kids ? <p>{formatLength(story.durationMs, lang)}</p> : null}
                           </div>
@@ -897,37 +897,36 @@ export function StoriesApp() {
                       )}
                     </button>
                     {!kids ? (
-                      <>
+                      <div className="card-actions">
                         <button
                           type="button"
-                          className="card-tool edit tap"
+                          className="card-tool tap"
                           aria-label={story.unwrapped ? text.editNamed(story.title) : text.editPresent}
-                          onPointerDown={(event) => event.stopPropagation()}
                           onClick={() => setMode({ type: "upload", story })}
                         >
                           <Pencil className="size-4" />
                         </button>
-                        <button
-                          type="button"
-                          className="card-tool delete tap"
-                          aria-label={story.unwrapped ? text.deleteNamed(story.title) : text.deletePresent}
-                          onPointerDown={(event) => event.stopPropagation()}
-                          onClick={() => setPendingDelete(story)}
-                        >
-                          <Trash2 className="size-4" />
-                        </button>
                         {story.unwrapped ? (
                           <button
                             type="button"
-                            className="card-tool gift tap"
+                            className="card-tool tap"
                             aria-label={text.wrapNamed(story.title)}
-                            onPointerDown={(event) => event.stopPropagation()}
                             onClick={() => void wrapStory(story)}
                           >
                             <Gift className="size-4" aria-hidden="true" />
                           </button>
-                        ) : null}
-                      </>
+                        ) : (
+                          <span className="card-tool spacer" aria-hidden="true" />
+                        )}
+                        <button
+                          type="button"
+                          className="card-tool tap"
+                          aria-label={story.unwrapped ? text.deleteNamed(story.title) : text.deletePresent}
+                          onClick={() => setPendingDelete(story)}
+                        >
+                          <Trash2 className="size-4" />
+                        </button>
+                      </div>
                     ) : null}
                   </article>
                 ))}
