@@ -105,6 +105,21 @@ it with the same priority as this file.
 
 ---
 
+## Stories repository
+
+The app lives in `trashpirate/stories`. Follow these rules for every change.
+
+- Always push changes to the `staging` branch. Do not push feature work to `main`.
+- Do not merge until the user explicitly asks to merge.
+- To merge, always create a pull request from `staging` into `main`. Never merge `main` directly.
+- Before creating that pull request, review the change and apply the cleanup before opening it:
+  - Can it be simplified?
+  - Can the code be cleaner?
+  - Is any code obsolete?
+  - Can anything be cleaned up or improved?
+
+---
+
 ## 1. Your environment / workspace (for you, never surfaced to the user)
 
 ### Where you are
