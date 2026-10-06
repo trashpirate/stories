@@ -426,27 +426,14 @@
 .shelf-panel {
   position: relative;
   display: flex;
-  flex: 1;
+  flex: 1 0 auto;
   flex-direction: column;
   gap: 0.7rem;
-  margin-top: 2.75rem;
-  padding: 1.25rem 1.1rem 2rem;
+  margin-top: 1.35rem;
+  padding: 1.35rem 1.1rem calc(2.5rem + env(safe-area-inset-bottom));
+  overflow: visible;
+  border-radius: 1.75rem 1.75rem 0 0;
   background: var(--color-cobalt);
-}
-.shelf-panel::before {
-  content: "";
-  position: absolute;
-  z-index: 0;
-  top: -1.25rem;
-  right: -8%;
-  left: -8%;
-  height: 2.5rem;
-  border-radius: 50%;
-  background: var(--color-cobalt);
-}
-.shelf-panel > * {
-  position: relative;
-  z-index: 1;
 }
 .limit-card,
 .shelf-empty,
