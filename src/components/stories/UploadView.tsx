@@ -4,12 +4,13 @@ import { ArrowLeft, Camera, Check, ChevronDown, ChevronUp, Image as ImageIcon, T
 import { LangSwitch } from "@/components/stories/LangSwitch";
 import { t, uiError, type UiError } from "@/lib/stories/copy";
 import { putStory } from "@/lib/stories/db";
+import { coverKey as coverObjectKey } from "@/lib/stories/keys";
 import { formatClock, formatLength } from "@/lib/stories/format";
 import { useLang } from "@/lib/stories/lang";
 import { CODE, codeOf, noted, report } from "@/lib/stories/log";
 import { discardStoryFiles, pruneStoryFiles, readClipFile, rememberStory, requestPersistentStorage, storeClip } from "@/lib/stories/source";
-import { publishStory, type SaveStep } from "@/lib/stories/sync";
-import type { Story } from "@/lib/stories/types";
+import { publishStory, forgetClips, type SaveStep } from "@/lib/stories/sync";
+import type { ClipSource, Story } from "@/lib/stories/types";
 
 let saveLock = false;
 
@@ -17,6 +18,7 @@ type DraftClip = {
   key: string;
   file: File;
   durationMs: number;
+  path?: string;
 };
 
 function isVideo(file: File): boolean {
@@ -721,7 +723,7 @@ export function UploadView({
         const added: DraftClip[] = [];
         for (const clip of source.clips) {
           const file = await readClipFile(clip);
-          added.push({ key: crypto.randomUUID(), file, durationMs: clip.durationMs });
+          added.push({ key: crypto.randomUUID(), file, durationMs: clip.durationMs, path: clip.path });
         }
         if (cancel) return;
         if (!added.length) {
@@ -803,11 +805,21 @@ export function UploadView({
     const storyId = storyIdRef.current;
     let kept = false;
     try {
-      const clips = [];
+      const clips: ClipSource[] = [];
+      const uploads: { path: string; body: Blob }[] = [];
+      const coverChanged = !story || cover !== story.cover;
+      if (coverChanged) uploads.push({ path: coverObjectKey(storyId), body: cover });
       for (let index = 0; index < drafts.length; index++) {
         const draft = drafts[index];
-        clips.push(await storeClip(storyId, index, draft.file, draft.durationMs));
+        if (draft.path) {
+          clips.push({ path: draft.path, durationMs: draft.durationMs });
+          continue;
+        }
+        const stored = await storeClip(storyId, index, draft.file, draft.durationMs);
+        clips.push(stored);
+        uploads.push({ path: stored.path, body: draft.file });
       }
+      const removed = (story?.clips ?? []).map((clip) => clip.path).filter((path) => !clips.some((clip) => clip.path === path));
       const next: Story = {
         id: storyId,
         title: title.trim() || text.defaultTitle,
@@ -820,8 +832,15 @@ export function UploadView({
       };
       await rememberStory(next);
       kept = true;
-      await publishStory(next, setStep);
+      await publishStory(next, setStep, uploads);
       await putStory(next);
+      if (removed.length > 0) {
+        try {
+          await forgetClips(removed);
+        } catch (error) {
+          report("could not delete removed clips", error);
+        }
+      }
       try {
         await pruneStoryFiles(storyId, clips.map((clip) => clip.path));
       } catch (error) {

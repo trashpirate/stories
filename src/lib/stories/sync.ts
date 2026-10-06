@@ -1,7 +1,6 @@
-import { cloudStatus, deleteCloudStory, readCloudLibrary, signStoryPaths, unlockFamily, writeCloudStory } from "@/lib/stories/cloud.fn";
+import { cloudStatus, deleteCloudStory, dropCloudClips, readCloudLibrary, signStoryPaths, unlockFamily, writeCloudStory } from "@/lib/stories/cloud.fn";
 import { coverKey } from "@/lib/stories/keys";
 import { CODE, fail, report } from "@/lib/stories/log";
-import { readClipFile } from "@/lib/stories/source";
 import type { CloudStory, Story } from "@/lib/stories/types";
 
 export type SaveStep =
@@ -44,52 +43,55 @@ async function putSigned(path: string, body: Blob): Promise<void> {
   fail(CODE.save, `upload did not finish for ${path}`, last);
 }
 
-/** Upload any local files we still have, then write the private shelf record. */
+/** Upload only the given files, then write the private shelf record. */
 const publishing = new Map<string, Promise<void>>();
 
-export async function publishStory(story: Story, onProgress?: (step: SaveStep) => void): Promise<void> {
+export async function publishStory(
+  story: Story,
+  onProgress?: (step: SaveStep) => void,
+  files: { path: string; body: Blob }[] = [],
+): Promise<void> {
   const current = publishing.get(story.id);
   if (current) {
     await current;
     return;
   }
-  const run = uploadStory(story, onProgress).finally(() => {
+  const run = uploadStory(story, files, onProgress).finally(() => {
     if (publishing.get(story.id) === run) publishing.delete(story.id);
   });
   publishing.set(story.id, run);
   await run;
 }
 
-async function uploadStory(story: Story, onProgress?: (step: SaveStep) => void): Promise<void> {
+async function uploadStory(
+  story: Story,
+  files: { path: string; body: Blob }[],
+  onProgress?: (step: SaveStep) => void,
+): Promise<void> {
   const status = await cloudStatus();
   if (!status.enabled) return;
   if (!status.signedIn) fail(CODE.passphrase, "publish while signed out");
-  const steps: { path: string; load: () => Promise<Blob | null> }[] = [
-    { path: coverKey(story.id), load: async () => story.cover },
-  ];
-  for (const clip of story.clips) {
-    steps.push({
-      path: clip.path,
-      load: async () => {
-        try {
-          return await readClipFile(clip);
-        } catch {
-          return null;
-        }
-      },
-    });
-  }
   onProgress?.({ kind: "prepare" });
+  const clips = files.filter((file) => !file.path.endsWith("/cover.jpg"));
   let sent = 0;
-  for (const step of steps) {
-    const body = await step.load();
-    if (!body) continue;
-    sent += 1;
-    onProgress?.(sent === 1 ? { kind: "cover" } : { kind: "clip", n: sent - 1, total: steps.length - 1 });
-    await putSigned(step.path, body);
+  for (const file of files) {
+    if (file.path.endsWith("/cover.jpg")) onProgress?.({ kind: "cover" });
+    else {
+      sent += 1;
+      onProgress?.({ kind: "clip", n: sent, total: clips.length });
+    }
+    await putSigned(file.path, file.body);
   }
   onProgress?.({ kind: "shelf" });
   await writeCloudStory({ data: toCloud(story) });
+}
+
+/** Delete clip files that a saved story no longer uses. */
+export async function forgetClips(paths: string[]): Promise<void> {
+  if (!paths.length) return;
+  const status = await cloudStatus();
+  if (!status.enabled || !status.signedIn) return;
+  await dropCloudClips({ data: { paths } });
 }
 
 export async function unpublishStory(story: Story): Promise<void> {

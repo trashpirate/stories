@@ -243,6 +243,21 @@ export function removeStory(id: string): Promise<{ ok: true }> {
   });
 }
 
+export function dropClips(paths: string[]): Promise<{ ok: true }> {
+  return guard(CODE.remove, `drop clips failed for ${paths.length} paths`, async () => {
+    requireSession();
+    const keys = paths.filter((path) => isStoryObjectKey(path) && !path.endsWith("/cover.jpg"));
+    if (keys.length === 0) return { ok: true };
+    await r2().send(
+      new DeleteObjectsCommand({
+        Bucket: bucket(),
+        Delete: { Objects: keys.map((Key) => ({ Key })), Quiet: true },
+      }),
+    );
+    return { ok: true };
+  });
+}
+
 export function signPaths(
   puts: string[],
   gets: string[],
