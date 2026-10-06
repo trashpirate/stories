@@ -471,8 +471,8 @@
   right: 0;
   bottom: 0;
   left: 0;
-  padding: 1.45rem 0.6rem 0.55rem;
-  background: linear-gradient(to top, rgb(22 58 154 / 82%) 0%, rgb(22 58 154 / 18%) 70%, transparent 100%);
+  padding: 1.7rem 0.85rem 0.75rem;
+  background: linear-gradient(to top, rgb(18 16 28 / 78%) 0%, rgb(18 16 28 / 32%) 58%, transparent 100%);
   color: var(--color-card);
 }
 .card-caption h2 {
