@@ -8,7 +8,7 @@ import { coverKey as coverObjectKey } from "@/lib/stories/keys";
 import { formatClock, formatLength } from "@/lib/stories/format";
 import { useLang } from "@/lib/stories/lang";
 import { CODE, codeOf, noted, report } from "@/lib/stories/log";
-import { discardStoryFiles, pruneStoryFiles, readClipFiles, rememberStory, requestPersistentStorage, storeClip } from "@/lib/stories/source";
+import { discardStoryFiles, getPlayableUrl, pruneStoryFiles, releasePlayableUrl, rememberStory, requestPersistentStorage, storeClip } from "@/lib/stories/source";
 import { publishStory, forgetClips, type SaveStep } from "@/lib/stories/sync";
 import type { ClipSource, Story } from "@/lib/stories/types";
 
@@ -16,9 +16,10 @@ let saveLock = false;
 
 type DraftClip = {
   key: string;
-  file: File;
+  src: string;
   durationMs: number;
   path?: string;
+  file?: File;
 };
 
 function isVideo(file: File): boolean {
@@ -229,7 +230,7 @@ function cropView(blob: Blob, view: CoverView, stageW: number, stageH: number): 
 }
 
 function CoverPicker({
-  file,
+  src,
   durationMs,
   clipName,
   selectedKey,
@@ -240,7 +241,7 @@ function CoverPicker({
   onChoose,
   onCover,
 }: {
-  file: File;
+  src: string;
   durationMs: number;
   clipName: string;
   selectedKey: string;
@@ -348,11 +349,13 @@ function CoverPicker({
     if (!video) return;
     let cancel = false;
     const owned: string[] = [];
-    const objectUrl = URL.createObjectURL(file);
     video.muted = true;
     video.playsInline = true;
     video.preload = "auto";
-    video.src = objectUrl;
+    const remote = !src.startsWith("blob:");
+    if (remote) video.crossOrigin = "anonymous";
+    else video.removeAttribute("crossorigin");
+    video.src = src;
 
     const showPreview = (url: string) => {
       const previous = previewRef.current;
@@ -390,19 +393,24 @@ function CoverPicker({
     };
 
     run().catch((error) => {
-      if (!cancel) setError(codeOf(error));
+      if (cancel) return;
+      if (initialCover && initialCover.size > 0) {
+        report("kept the saved cover; clip preview did not open", error);
+        setReady(true);
+        return;
+      }
+      setError(codeOf(error));
     });
 
     return () => {
       cancel = true;
-      URL.revokeObjectURL(objectUrl);
       for (const url of owned) URL.revokeObjectURL(url);
       if (previewRef.current && !owned.includes(previewRef.current)) URL.revokeObjectURL(previewRef.current);
       previewRef.current = null;
       video.removeAttribute("src");
       video.load();
     };
-  }, [file, durationMs]);
+  }, [src, durationMs]);
 
   async function captureAt(seconds: number, token: number) {
     const video = videoRef.current;
@@ -692,6 +700,7 @@ export function UploadView({
   const galleryRef = useRef<HTMLInputElement>(null);
   const seenKey = useRef("");
   const firstKey = useRef("");
+  const ownedSrc = useRef<string[]>([]);
   const storyIdRef = useRef(story?.id ?? crypto.randomUUID());
   const savingRef = useRef(false);
   const [title, setTitle] = useState(story?.title ?? "");
@@ -699,7 +708,7 @@ export function UploadView({
   const [cover, setCover] = useState<Blob | null>(null);
   const [coverKey, setCoverKey] = useState("");
   const [coverClipKey, setCoverClipKey] = useState("");
-  const [keepInitial, setKeepInitial] = useState(story != null);
+  const [keepInitial, setKeepInitial] = useState(() => Boolean(story?.cover && story.cover.size > 0));
   const [reading, setReading] = useState(story != null);
   const [saving, setSaving] = useState(false);
   const [step, setStep] = useState<SaveStep | null>(null);
@@ -714,19 +723,26 @@ export function UploadView({
   const total = drafts.reduce((sum, clip) => sum + clip.durationMs, 0);
   const canSave = drafts.length > 0 && cover != null && coverKey === activeKey && !saving && !reading;
 
+  const savedCover = story?.cover && story.cover.size > 0 ? story.cover : null;
+
+  useEffect(() => {
+    return () => {
+      for (const url of ownedSrc.current) releasePlayableUrl(url);
+    };
+  }, []);
+
   useEffect(() => {
     if (!story) return;
     let cancel = false;
     const source = story;
     void (async () => {
       try {
-        const files = await readClipFiles(source.clips);
-        const added: DraftClip[] = files.map((file, index) => ({
-          key: crypto.randomUUID(),
-          file,
-          durationMs: source.clips[index].durationMs,
-          path: source.clips[index].path,
-        }));
+        const added: DraftClip[] = [];
+        for (const clip of source.clips) {
+          const src = await getPlayableUrl(clip);
+          ownedSrc.current.push(src);
+          added.push({ key: crypto.randomUUID(), src, durationMs: clip.durationMs, path: clip.path });
+        }
         if (cancel) return;
         if (!added.length) {
           setError("noclips");
@@ -735,8 +751,12 @@ export function UploadView({
         firstKey.current = added[0].key;
         setDrafts(added);
         setCoverClipKey(added[0].key);
-        setCover(source.cover);
-        setCoverKey(added[0].key);
+        if (savedCover) {
+          setCover(savedCover);
+          setCoverKey(added[0].key);
+        } else {
+          setKeepInitial(false);
+        }
       } catch (error) {
         if (!cancel) setError(codeOf(error));
       } finally {
@@ -774,7 +794,9 @@ export function UploadView({
       for (const file of files) {
         if (!isVideo(file)) continue;
         const durationMs = await probeDuration(file);
-        added.push({ key: crypto.randomUUID(), file, durationMs });
+        const src = URL.createObjectURL(file);
+        ownedSrc.current.push(src);
+        added.push({ key: crypto.randomUUID(), file, durationMs, src });
       }
       if (!added.length) setError(CODE.video);
       else setDrafts((current) => [...current, ...added]);
@@ -817,6 +839,7 @@ export function UploadView({
           clips.push({ path: draft.path, durationMs: draft.durationMs });
           continue;
         }
+        if (!draft.file) throw noted(CODE.open, "a new clip had no file to save");
         const stored = await storeClip(storyId, index, draft.file, draft.durationMs);
         clips.push(stored);
         uploads.push({ path: stored.path, body: draft.file });
@@ -991,12 +1014,12 @@ export function UploadView({
         {drafts.length > 1 ? <p className="font-bold text-muted">{text.together} {formatLength(total, lang)}</p> : null}
         {coverClip ? (
           <CoverPicker
-            file={coverClip.file}
+            src={coverClip.src}
             durationMs={coverClip.durationMs}
             clipName={text.clip(drafts.findIndex((clip) => clip.key === coverClip.key) + 1)}
             selectedKey={coverClip.key}
             choices={drafts.map((clip, index) => ({ key: clip.key, label: text.clip(index + 1) }))}
-            initialCover={keepInitial && coverClip.key === firstKey.current ? (story?.cover ?? null) : null}
+            initialCover={keepInitial && coverClip.key === firstKey.current ? savedCover : null}
             title={title.trim() || text.defaultTitle}
             lengthLabel={formatLength(total, lang)}
             onChoose={setCoverClipKey}
