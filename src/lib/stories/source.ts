@@ -1,5 +1,5 @@
 import type { ClipSource, Story } from "@/lib/stories/types";
-import { CODE, fail, isStoriesError, noted, report } from "@/lib/stories/log";
+import { CODE, fail, isStoriesError, noted } from "@/lib/stories/log";
 
 /**
  * Where a clip lives. The shelf and the player only ask for a playable URL.
@@ -54,30 +54,6 @@ async function fileFromPath(path: string): Promise<File> {
   return handle.getFile();
 }
 
-/** Local copies when this phone has them. Otherwise the cloud files, so a new tab can still edit. */
-export async function readClipFiles(clips: ClipSource[]): Promise<File[]> {
-  const files: Array<File | null> = new Array(clips.length);
-  const missing: number[] = [];
-  for (let index = 0; index < clips.length; index++) {
-    try {
-      files[index] = await fileFromPath(clips[index].path);
-    } catch (error) {
-      if (isStoriesError(error)) throw error;
-      missing.push(index);
-    }
-  }
-  if (missing.length === 0) return files as File[];
-  report(`loading ${missing.length} clip(s) from cloud; not stored on this device`);
-  const paths = missing.map((index) => clips[index].path);
-  const urls = await signedReadUrls(paths);
-  await Promise.all(
-    missing.map(async (index, order) => {
-      files[index] = await downloadClip(paths[order], urls[order]);
-    }),
-  );
-  return files as File[];
-}
-
 async function signedReadUrls(paths: string[]): Promise<string[]> {
   const { signStoryPaths } = await import("@/lib/stories/cloud.fn");
   const signed = await signStoryPaths({ data: { gets: paths } });
@@ -86,19 +62,6 @@ async function signedReadUrls(paths: string[]): Promise<string[]> {
     if (!url) fail(CODE.open, `no signed read url for ${path}`);
     return url;
   });
-}
-
-async function downloadClip(path: string, url: string): Promise<File> {
-  let response: Response;
-  try {
-    response = await fetch(url);
-  } catch (error) {
-    fail(CODE.open, `clip download failed for ${path}`, error);
-  }
-  if (!response.ok) fail(CODE.open, `clip download returned ${response.status} for ${path}`);
-  const blob = await response.blob();
-  const name = path.split("/").pop() || "clip.mp4";
-  return new File([blob], name, { type: blob.type || mimeFromPath(path) });
 }
 
 export async function storeClip(storyId: string, index: number, file: File, durationMs: number): Promise<ClipSource> {
