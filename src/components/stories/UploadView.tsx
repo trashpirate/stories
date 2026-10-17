@@ -8,7 +8,7 @@ import { coverKey as coverObjectKey } from "@/lib/stories/keys";
 import { formatClock, formatLength } from "@/lib/stories/format";
 import { useLang } from "@/lib/stories/lang";
 import { CODE, codeOf, noted, report } from "@/lib/stories/log";
-import { discardStoryFiles, pruneStoryFiles, readClipFile, rememberStory, requestPersistentStorage, storeClip } from "@/lib/stories/source";
+import { discardStoryFiles, pruneStoryFiles, readClipFiles, rememberStory, requestPersistentStorage, storeClip } from "@/lib/stories/source";
 import { publishStory, forgetClips, type SaveStep } from "@/lib/stories/sync";
 import type { ClipSource, Story } from "@/lib/stories/types";
 
@@ -720,11 +720,13 @@ export function UploadView({
     const source = story;
     void (async () => {
       try {
-        const added: DraftClip[] = [];
-        for (const clip of source.clips) {
-          const file = await readClipFile(clip);
-          added.push({ key: crypto.randomUUID(), file, durationMs: clip.durationMs, path: clip.path });
-        }
+        const files = await readClipFiles(source.clips);
+        const added: DraftClip[] = files.map((file, index) => ({
+          key: crypto.randomUUID(),
+          file,
+          durationMs: source.clips[index].durationMs,
+          path: source.clips[index].path,
+        }));
         if (cancel) return;
         if (!added.length) {
           setError("noclips");
